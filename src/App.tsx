@@ -10,12 +10,25 @@ interface MoveRecord {
   flipped?: [number,number][]
 }
 
+interface TauntBubble {
+  id: number
+  text: string
+  x: number
+  y: number
+  vx: number
+  vy: number
+  age: number
+  opacity: number
+}
+
 export default function App(){
   const [player] = useState<CellType>(BLACK) // human
   const [aiLevel,setAiLevel] = useState<'easy'|'medium'|'hard'>('medium')
   const [thinking,setThinking] = useState(false)
-  const [taunt,setTaunt] = useState<string | null>(null)
-  const tauntTimer = useRef<number|undefined>()
+  const [tauntBubbles,setTauntBubbles] = useState<TauntBubble[]>([])
+  const nextTauntBubbleId = useRef(1)
+  const tauntAnimFrame = useRef<number | undefined>()
+  const tauntLastTs = useRef<number | undefined>()
   const [usedTaunts, setUsedTaunts] = useState<Set<string>>(new Set())
   const [history, setHistory] = useState<Array<{ board: CellType[][], turn: CellType, move?: MoveRecord }>>(()=>[
     { board: createInitialBoard(), turn: BLACK }
@@ -23,13 +36,24 @@ export default function App(){
   const [historyIndex, setHistoryIndex] = useState(0)
   const historyIndexRef = useRef(0)
   const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
+  const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
+  const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const hadLatestGameOverRef = useRef(false)
 
   const current = history[historyIndex]
   const board = current.board
   const turn = current.turn
+  const aiPlayer = opponent(player)
+  const previewEntry = hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
+  const renderedEntry = previewEntry ?? current
+  const renderedBoard = renderedEntry.board
+  const renderedTurn = renderedEntry.turn
+  const isHistoryPreviewing = hoveredHistoryIndex !== null
+  const displayedHistoryStep = hoveredHistoryIndex ?? historyIndex
 
   // compute last-move highlights for rendering (always show for selected history entry)
-  const lastMove = current.move ?? null
+  const lastMove = renderedEntry.move ?? null
   const lastPlacedKey = lastMove ? `${lastMove.r},${lastMove.c}` : null
   const lastFlippedSet = lastMove && lastMove.flipped ? new Set(lastMove.flipped.map(([rr,cc])=>`${rr},${cc}`)) : new Set<string>()
 
@@ -164,8 +188,89 @@ export default function App(){
     return choice
   }
 
+  function spawnTauntBubble(text:string){
+    const containerRect = containerRef.current?.getBoundingClientRect()
+    const width = containerRect?.width ?? 900
+    const height = containerRect?.height ?? 620
+    const baseX = Math.min(width - 260, Math.max(140, width * 0.58))
+    const baseY = Math.min(height - 110, Math.max(180, height * 0.70))
+    const id = nextTauntBubbleId.current++
+
+    const bubble: TauntBubble = {
+      id,
+      text,
+      x: baseX + (Math.random() * 40 - 20),
+      y: baseY,
+      vx: Math.random() * 24 - 12,
+      vy: -(18 + Math.random() * 5),
+      age: 0,
+      opacity: 1
+    }
+
+    setTauntBubbles(prev => {
+      const next = [...prev, bubble]
+      return next.slice(-5)
+    })
+  }
+
+  useEffect(()=>{
+    if(tauntBubbles.length===0){
+      if(tauntAnimFrame.current) cancelAnimationFrame(tauntAnimFrame.current)
+      tauntAnimFrame.current = undefined
+      tauntLastTs.current = undefined
+      return
+    }
+
+    const gravity = 22
+    const driftDamping = 0.998
+    const fadeStartAge = 2.4
+
+    const tick = (ts:number)=>{
+      const prevTs = tauntLastTs.current ?? ts
+      const dt = Math.min((ts - prevTs) / 1000, 0.05)
+      tauntLastTs.current = ts
+
+      setTauntBubbles(prev => prev
+        .map(b => {
+          const vx = b.vx * driftDamping
+          const vy = b.vy + gravity * dt
+          const x = b.x + vx * dt
+          const y = b.y + vy * dt
+          const age = b.age + dt
+          const falling = vy > 0
+          const fadeRate = falling ? 0.22 : 0.07
+          const opacityLoss = age > fadeStartAge ? dt * fadeRate : 0
+          const opacity = Math.max(0, b.opacity - opacityLoss)
+          return { ...b, x, y, vx, vy, age, opacity }
+        })
+        .filter(b => b.opacity > 0.02 && b.age < 18 && b.y < 1200)
+      )
+
+      tauntAnimFrame.current = window.requestAnimationFrame(tick) as unknown as number
+    }
+
+    tauntAnimFrame.current = window.requestAnimationFrame(tick) as unknown as number
+    return ()=>{
+      if(tauntAnimFrame.current) cancelAnimationFrame(tauntAnimFrame.current)
+      tauntAnimFrame.current = undefined
+      tauntLastTs.current = undefined
+    }
+  },[tauntBubbles.length])
+
   const validMoves = useMemo(()=> getValidMoves(board,turn),[board,turn])
   const validMap = useMemo(()=> new Set(validMoves.map(([r,c])=>`${r},${c}`)),[validMoves])
+  const validMoveFlipsMap = useMemo(()=>{
+    const map = new Map<string, [number,number][]>()
+    for(const [r,c,flips] of validMoves){
+      map.set(`${r},${c}`, flips)
+    }
+    return map
+  },[validMoves])
+  const previewFlippedSet = useMemo(()=>{
+    if(turn !== player || !hoveredMoveKey) return new Set<string>()
+    const flips = validMoveFlipsMap.get(hoveredMoveKey) ?? []
+    return new Set(flips.map(([rr,cc])=>`${rr},${cc}`))
+  },[hoveredMoveKey, player, turn, validMoveFlipsMap])
 
   const isAtLatestHistory = historyIndex === history.length - 1
   const historyRef = useRef<HTMLDivElement | null>(null)
@@ -200,6 +305,9 @@ export default function App(){
         setHistory(trimmed)
         setHistoryIndex(newIndex)
         historyIndexRef.current = newIndex
+        const diff = sc.black - sc.white
+        const message = pickTaunt(diff)
+        spawnTauntBubble(message)
         return
       }
 
@@ -227,9 +335,7 @@ export default function App(){
             // show highlight for this AI move (no temporary expiry)
             const diff = sc.black - sc.white
             const message = pickTaunt(diff)
-            setTaunt(message)
-            if(tauntTimer.current) clearTimeout(tauntTimer.current)
-            tauntTimer.current = window.setTimeout(()=> setTaunt(null), 5000)
+            spawnTauntBubble(message)
           }
       }
       setThinking(false)
@@ -258,14 +364,50 @@ export default function App(){
     }
   },[history])
 
+  useEffect(()=>{
+    if(hoveredHistoryIndex !== null && hoveredHistoryIndex >= history.length){
+      setHoveredHistoryIndex(null)
+    }
+  },[history.length, hoveredHistoryIndex])
+
+  useEffect(()=>{
+    if(turn !== player || !isAtLatestHistory){
+      setHoveredMoveKey(null)
+    }
+  },[turn, player, isAtLatestHistory])
+
+  useEffect(()=>{
+    const latestGameOver = isAtLatestHistory && isGameOver(board)
+    if(latestGameOver && !hadLatestGameOverRef.current){
+      const sc = score(board)
+      const message = pickTaunt(sc.black - sc.white)
+      spawnTauntBubble(message)
+    }
+    hadLatestGameOverRef.current = latestGameOver
+  },[board, isAtLatestHistory])
+
   function handleCellClick(r:number,c:number){
     if(turn!==player) return
+    setHoveredMoveKey(null)
     const flips = flipsForMove(board,r,c,player)
     const nb = applyMove(board,r,c,player)
     if(!nb) return
     const sc = score(nb)
     pushHistory(nb, WHITE, { player, r, c, score: sc, flipped: flips })
     setShouldAutoPlayAi(true)
+  }
+
+  function handleCellHover(r:number,c:number){
+    if(turn!==player || !isAtLatestHistory){
+      setHoveredMoveKey(null)
+      return
+    }
+    const key = `${r},${c}`
+    setHoveredMoveKey(validMap.has(key) ? key : null)
+  }
+
+  function handleCellLeave(){
+    setHoveredMoveKey(null)
   }
 
   function handleUndo(){
@@ -275,7 +417,7 @@ export default function App(){
       historyIndexRef.current = next
       return next
     })
-    setTaunt(null)
+    setTauntBubbles([])
     setShouldAutoPlayAi(false)
   }
 
@@ -286,19 +428,42 @@ export default function App(){
       historyIndexRef.current = next
       return next
     })
-    setTaunt(null)
+    setTauntBubbles([])
     setShouldAutoPlayAi(false)
+  }
+
+  function handleHistoryDoubleClick(targetIndex:number){
+    if(targetIndex >= historyIndex) return
+    if(targetIndex === 0){
+      setHistory(prev => prev.slice(0, 1))
+      setHistoryIndex(0)
+      historyIndexRef.current = 0
+      setHoveredHistoryIndex(null)
+      setShouldAutoPlayAi(false)
+      setTauntBubbles([])
+      return
+    }
+    const targetEntry = history[targetIndex]
+    const targetMove = targetEntry?.move
+    if(!targetMove || targetMove.player !== aiPlayer) return
+
+    setHistory(prev => prev.slice(0, targetIndex + 1))
+    setHistoryIndex(targetIndex)
+    historyIndexRef.current = targetIndex
+    setHoveredHistoryIndex(null)
+    setShouldAutoPlayAi(false)
+    setTauntBubbles([])
   }
 
   
 
-  const sc = score(board)
+  const sc = score(renderedBoard)
 
   return (
-    <div className="container">
+    <div className="container" ref={containerRef}>
       <h1>Othello — Single Player</h1>
       <div className="controls">
-        <div>Turn: {turn===BLACK? 'Black' : 'White'} {thinking? '(AI thinking...)': ''}</div>
+        <div>Turn: {renderedTurn===BLACK? 'Black' : 'White'} {thinking && !isHistoryPreviewing? '(AI thinking...)': ''} {isHistoryPreviewing ? `(previewing step ${displayedHistoryStep})` : ''}</div>
         <label>AI Level:
           <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
             <option value="easy">Easy</option>
@@ -313,23 +478,51 @@ export default function App(){
           historyIndexRef.current = 0
           setShouldAutoPlayAi(false)
           setUsedTaunts(new Set())
-          setTaunt(null)
-          if(tauntTimer.current) clearTimeout(tauntTimer.current)
+          setTauntBubbles([])
+          hadLatestGameOverRef.current = false
         }}>Reset</button>
         <button onClick={handleUndo} disabled={historyIndex===0}>Undo</button>
         <button onClick={handleRedo} disabled={historyIndex >= history.length-1}>Redo</button>
       </div>
 
       <div className="main">
-        <Board board={board} onCellClick={handleCellClick} hints={turn===player} validMap={validMap} lastPlacedKey={lastPlacedKey} lastFlippedSet={lastFlippedSet} />
+        <div className={"board-preview-shell" + (isHistoryPreviewing ? ' previewing' : '')}>
+          <Board
+            board={renderedBoard}
+            onCellClick={(r,c)=>{ if(!isHistoryPreviewing) handleCellClick(r,c) }}
+            onCellHover={isHistoryPreviewing ? undefined : handleCellHover}
+            onCellLeave={isHistoryPreviewing ? undefined : handleCellLeave}
+            hints={!isHistoryPreviewing && turn===player}
+            validMap={!isHistoryPreviewing ? validMap : undefined}
+            lastPlacedKey={lastPlacedKey}
+            lastFlippedSet={lastFlippedSet}
+            previewFlippedSet={!isHistoryPreviewing ? previewFlippedSet : undefined}
+            previewPlayer={!isHistoryPreviewing && turn===player ? player : null}
+          />
+        </div>
 
-        <aside ref={el=>historyRef.current = el as HTMLDivElement | null} className="history">
-          <strong>History</strong> — Step {historyIndex} of {history.length-1}
+        <aside ref={el=>historyRef.current = el as HTMLDivElement | null} className="history" onMouseLeave={()=>setHoveredHistoryIndex(null)}>
+          <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
           <ol>
             {history.map((entry, index) => (
-              <li key={index} style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}>
+              (()=>{
+                const isJumpable = index < historyIndex && (index === 0 || entry.move?.player === aiPlayer)
+                const jumpTitle = index === 0
+                  ? 'Double-click to restart from the beginning'
+                  : 'Double-click to jump back here (your turn next)'
+                return (
+              <li
+                key={index}
+                className={isJumpable ? 'history-jumpable' : ''}
+                title={isJumpable ? jumpTitle : undefined}
+                onMouseEnter={()=>setHoveredHistoryIndex(index)}
+                onDoubleClick={()=>handleHistoryDoubleClick(index)}
+                style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}
+              >
                 {index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}
               </li>
+                )
+              })()
             ))}
           </ol>
         </aside>
@@ -339,9 +532,15 @@ export default function App(){
         <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
       </div>
 
-      {taunt && <div className="taunt">{taunt}</div>}
+      <div className="taunt-layer" aria-hidden>
+        {tauntBubbles.map(b=> (
+          <div key={b.id} className="taunt-bubble" style={{transform:`translate(${b.x}px, ${b.y}px)`, opacity:b.opacity}}>
+            {b.text}
+          </div>
+        ))}
+      </div>
 
-      {isGameOver(board) && <div style={{marginTop:12}}><strong>Game Over</strong></div>}
+      {isGameOver(renderedBoard) && <div style={{marginTop:12}}><strong>Game Over</strong></div>}
     </div>
   )
 }
