@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Othello: Debug In Chrome",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src",
+      "preLaunchTask": "vite: dev"
+    },
+    {
+      "name": "Othello: Start Dev Server",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev"
+    }
+  ]
+}
