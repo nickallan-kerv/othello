@@ -48,7 +48,6 @@ export default function App(){
   const previewEntry = hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
   const renderedEntry = previewEntry ?? current
   const renderedBoard = renderedEntry.board
-  const renderedTurn = renderedEntry.turn
   const isHistoryPreviewing = hoveredHistoryIndex !== null
   const displayedHistoryStep = hoveredHistoryIndex ?? historyIndex
 
@@ -192,15 +191,16 @@ export default function App(){
     const containerRect = containerRef.current?.getBoundingClientRect()
     const width = containerRect?.width ?? 900
     const height = containerRect?.height ?? 620
-    const baseX = Math.min(width - 260, Math.max(140, width * 0.58))
-    const baseY = Math.min(height - 110, Math.max(180, height * 0.70))
+    const bubbleWidth = Math.min(320, Math.max(220, width * 0.7))
+    const baseX = Math.max(0, (width - bubbleWidth) / 2)
+    const baseY = Math.max(120, height * 0.46)
     const id = nextTauntBubbleId.current++
 
     const bubble: TauntBubble = {
       id,
       text,
-      x: baseX + (Math.random() * 40 - 20),
-      y: baseY,
+      x: baseX + (Math.random() * 18 - 9),
+      y: baseY + (Math.random() * 20 - 10),
       vx: Math.random() * 24 - 12,
       vy: -(18 + Math.random() * 5),
       age: 0,
@@ -450,27 +450,28 @@ export default function App(){
 
   return (
     <div className="container" ref={containerRef}>
-      <h1>Othello — Single Player</h1>
-      <div className="controls">
-        <div>Turn: {renderedTurn===BLACK? 'Black' : 'White'} {thinking && !isHistoryPreviewing? '(AI thinking...)': ''} {isHistoryPreviewing ? `(previewing step ${displayedHistoryStep})` : ''}</div>
-        <label>AI Level:
-          <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label>
-        <button onClick={()=>{
-          const initial = createInitialBoard()
-          setHistory([{ board: initial, turn: BLACK }])
-          setHistoryIndex(0)
-          historyIndexRef.current = 0
-          setShouldAutoPlayAi(false)
-          setUsedTaunts(new Set())
-          setTauntBubbles([])
-          hadLatestGameOverRef.current = false
-        }}>Reset</button>
-        <button onClick={handleUndo} disabled={historyIndex===0}>Undo</button>
+      <div className="topbar">
+        <h1>Othello</h1>
+        <div className="controls">
+          <label>AI Level:
+            <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+          <button onClick={()=>{
+            const initial = createInitialBoard()
+            setHistory([{ board: initial, turn: BLACK }])
+            setHistoryIndex(0)
+            historyIndexRef.current = 0
+            setShouldAutoPlayAi(false)
+            setUsedTaunts(new Set())
+            setTauntBubbles([])
+            hadLatestGameOverRef.current = false
+          }}>Reset</button>
+          <button onClick={handleUndo} disabled={historyIndex===0}>Undo</button>
+        </div>
       </div>
 
       <div className="main">
@@ -494,6 +495,7 @@ export default function App(){
             <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
           </div>
           <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
+          <div className="history-help">Hover any move to preview. Double-click highlighted moves to jump back.</div>
           <ol>
             {history.map((entry, index) => (
               (()=>{
