@@ -143,6 +143,7 @@ export default function App(){
   },[hoveredMoveKey, player, turn, validMoveFlipsMap])
 
   const aiDelayMs = aiLevel === 'easy' || aiLevel === 'medium' ? 1000 : 0
+  const buildId = import.meta.env.VITE_BUILD_ID || 'dev-local'
 
   function nextAiPhrase(){
     if(aiPhraseDeckRef.current.length === 0){
@@ -598,6 +599,7 @@ export default function App(){
                 </select>
               </label>
             </div>
+            <div className="board-build">Build {buildId}</div>
           </div>
           <Board
             board={renderedBoard}
