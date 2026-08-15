@@ -236,15 +236,23 @@ export default function App(){
           const centeredX = Math.max(0, Math.min(width - bubbleWidth, (width - bubbleWidth) / 2))
           const centeredY = Math.max(0, Math.min(height - bubbleHeight, (height - bubbleHeight) / 2))
 
-          const candidates = [
-            { x: centeredX, y: belowY, ok: belowY + bubbleHeight <= height },
-            { x: centeredX, y: aboveY, ok: aboveY >= 0 },
-            { x: leftX, y: centeredY, ok: leftX >= 0 },
-            { x: rightX, y: centeredY, ok: rightX + bubbleWidth <= width }
-          ].filter(c => c.ok)
+          const clampX = (x:number)=> Math.max(0, Math.min(width - bubbleWidth, x))
+          const clampY = (y:number)=> Math.max(0, Math.min(height - bubbleHeight, y))
+          const placed = (x:number, y:number)=>{
+            const px = clampX(x)
+            const py = clampY(y)
+            return { x: px, y: py, intersects: intersectsAvoid(px, py) }
+          }
 
-          if(candidates.length > 0){
-            const chosen = candidates[0]
+          const candidates = [
+            placed(centeredX, belowY),
+            placed(leftX, centeredY),
+            placed(rightX, centeredY),
+            placed(centeredX, aboveY)
+          ]
+
+          const chosen = candidates.find(c => !c.intersects)
+          if(chosen){
             baseX = chosen.x
             baseY = chosen.y
           }
