@@ -421,17 +421,6 @@ export default function App(){
     setShouldAutoPlayAi(false)
   }
 
-  function handleRedo(){
-    setHistoryIndex(prev => {
-      const step = prev % 2 === 0 ? 2 : 1
-      const next = Math.min(prev + step, history.length - 1)
-      historyIndexRef.current = next
-      return next
-    })
-    setTauntBubbles([])
-    setShouldAutoPlayAi(false)
-  }
-
   function handleHistoryDoubleClick(targetIndex:number){
     if(targetIndex >= historyIndex) return
     if(targetIndex === 0){
@@ -482,7 +471,6 @@ export default function App(){
           hadLatestGameOverRef.current = false
         }}>Reset</button>
         <button onClick={handleUndo} disabled={historyIndex===0}>Undo</button>
-        <button onClick={handleRedo} disabled={historyIndex >= history.length-1}>Redo</button>
       </div>
 
       <div className="main">
@@ -502,6 +490,9 @@ export default function App(){
         </div>
 
         <aside ref={el=>historyRef.current = el as HTMLDivElement | null} className="history" onMouseLeave={()=>setHoveredHistoryIndex(null)}>
+          <div style={{marginBottom:10}}>
+            <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
+          </div>
           <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
           <ol>
             {history.map((entry, index) => (
@@ -526,10 +517,6 @@ export default function App(){
             ))}
           </ol>
         </aside>
-      </div>
-
-      <div style={{marginTop:12}}>
-        <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
       </div>
 
       <div className="taunt-layer" aria-hidden>
