@@ -65,10 +65,12 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
 .history{width:260px;max-height:520px;overflow:auto;padding-left:12px;border-left:2px solid rgba(0,0,0,0.08)}
 .history-help{margin-top:6px;margin-bottom:8px;font-size:13px;color:#2b2b2b;font-weight:600;line-height:1.35}
 .history ol{margin-top:8px;padding-left:18px}
-.history li{margin:6px 0;padding:4px 6px;border-radius:8px}
+.history li{margin:6px 0;padding:4px 6px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.history li > span{min-width:0}
 .history li.history-jumpable{cursor:pointer;background:rgba(20,90,200,0.09);border-left:4px solid rgba(20,90,200,0.55)}
-.history li.history-jumpable::after{content:'  double-click';font-size:11px;font-weight:700;color:#18407f;letter-spacing:0.02em;text-transform:uppercase}
 .history li.history-jumpable:hover{background:rgba(20,90,200,0.16);transform:translateX(1px)}
+.history-revert{border:none;background:none;padding:0;color:#174c96;font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer}
+.history-revert:hover{color:#0f3a75}
 
 /* Last move highlights */
 /* stronger, more visible last-move highlights */
@@ -85,5 +87,6 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
   .main{flex-direction:column;gap:12px}
   .board-preview-shell{width:100%}
   .history{width:100%;max-height:260px;padding-left:0;padding-top:10px;border-left:none;border-top:2px solid rgba(0,0,0,0.08)}
+  .history ol{padding-left:12px}
   .taunt-bubble{max-width:min(78vw,320px)}
 }
