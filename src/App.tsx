@@ -40,20 +40,23 @@ export default function App(){
     if(typeof window === 'undefined') return true
     return window.matchMedia('(hover: hover) and (pointer: fine)').matches
   })
+  const [isTouchHistoryPreviewing, setIsTouchHistoryPreviewing] = useState(false)
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
   const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const historyRef = useRef<HTMLDivElement | null>(null)
+  const historyTouchPreviewActiveRef = useRef(false)
+  const suppressHistoryTapRef = useRef(false)
   const hadLatestGameOverRef = useRef(false)
 
   const current = history[historyIndex]
   const board = current.board
   const turn = current.turn
   const aiPlayer = opponent(player)
-  const previewEntry = supportsHover && hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
+  const previewEntry = (supportsHover || isTouchHistoryPreviewing) && hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
   const renderedEntry = previewEntry ?? current
   const renderedBoard = renderedEntry.board
-  const isHistoryPreviewing = supportsHover && hoveredHistoryIndex !== null
+  const isHistoryPreviewing = (supportsHover || isTouchHistoryPreviewing) && hoveredHistoryIndex !== null
   const displayedHistoryStep = hoveredHistoryIndex ?? historyIndex
 
   // compute last-move highlights for rendering (always show for selected history entry)
@@ -461,8 +464,48 @@ export default function App(){
   useEffect(()=>{
     if(!supportsHover){
       setHoveredHistoryIndex(null)
+      setIsTouchHistoryPreviewing(false)
     }
   },[supportsHover])
+
+  function getHistoryIndexFromTouch(touch: Touch){
+    const element = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null
+    const historyItem = element?.closest('li[data-history-index]') as HTMLElement | null
+    if(!historyItem) return null
+    const value = Number(historyItem.dataset.historyIndex)
+    return Number.isInteger(value) ? value : null
+  }
+
+  function handleHistoryTouchStart(event: React.TouchEvent<HTMLOListElement>){
+    if(supportsHover) return
+    const touch = event.touches[0]
+    if(!touch) return
+    const index = getHistoryIndexFromTouch(touch)
+    if(index === null) return
+    historyTouchPreviewActiveRef.current = true
+    suppressHistoryTapRef.current = false
+    setIsTouchHistoryPreviewing(true)
+    setHoveredHistoryIndex(index)
+  }
+
+  function handleHistoryTouchMove(event: React.TouchEvent<HTMLOListElement>){
+    if(supportsHover || !historyTouchPreviewActiveRef.current) return
+    event.preventDefault()
+    suppressHistoryTapRef.current = true
+    const touch = event.touches[0]
+    if(!touch) return
+    const index = getHistoryIndexFromTouch(touch)
+    if(index !== null){
+      setHoveredHistoryIndex(index)
+    }
+  }
+
+  function handleHistoryTouchEnd(){
+    if(supportsHover) return
+    historyTouchPreviewActiveRef.current = false
+    setIsTouchHistoryPreviewing(false)
+    setHoveredHistoryIndex(null)
+  }
 
   useEffect(()=>{
     if(turn !== player || !isAtLatestHistory){
@@ -596,25 +639,36 @@ export default function App(){
         </div>
 
         <aside ref={el=>historyRef.current = el as HTMLDivElement | null} className="history" onMouseLeave={()=>setHoveredHistoryIndex(null)}>
-          <div style={{marginBottom:10}}>
-            <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
-          </div>
           <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
           <div className="history-help">
             {supportsHover
               ? 'Hover any move to preview. Use Revert on highlighted moves to jump back.'
-              : 'Tap a highlighted move or Revert to jump back.'}
+              : 'Drag across history to preview. Tap a highlighted move or Revert to jump back.'}
           </div>
-          <ol>
+          <ol
+            onTouchStart={handleHistoryTouchStart}
+            onTouchMove={handleHistoryTouchMove}
+            onTouchEnd={handleHistoryTouchEnd}
+            onTouchCancel={handleHistoryTouchEnd}
+          >
             {history.map((entry, index) => (
               (()=>{
                 const isJumpable = index < historyIndex && (index === 0 || entry.move?.player === aiPlayer)
                 return (
               <li
                 key={index}
+                data-history-index={index}
                 className={isJumpable ? 'history-jumpable' : ''}
                 onMouseEnter={()=>{ if(supportsHover) setHoveredHistoryIndex(index) }}
-                onClick={()=>{ if(!supportsHover && isJumpable) handleHistoryDoubleClick(index) }}
+                onClick={()=>{
+                  if(!supportsHover && isJumpable){
+                    if(suppressHistoryTapRef.current){
+                      suppressHistoryTapRef.current = false
+                      return
+                    }
+                    handleHistoryDoubleClick(index)
+                  }
+                }}
                 style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}
               >
                 <span>{index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}</span>
