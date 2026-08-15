@@ -298,7 +298,7 @@ export default function App(){
     const dy = touch.clientY - historyTouchLastYRef.current
     const dt = Math.max((now - historyTouchLastTsRef.current) / 1000, 0.008)
 
-    const stepDelta = dy / 40
+    const stepDelta = -dy / 40
     applyHistoryStepDelta(stepDelta)
     historyMomentumVelocityRef.current = stepDelta / dt
 
