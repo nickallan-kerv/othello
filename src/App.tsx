@@ -192,19 +192,24 @@ export default function App(){
     const containerRect = containerRef.current?.getBoundingClientRect()
     const width = containerRect?.width ?? 900
     const height = containerRect?.height ?? 620
-    const bubbleWidth = Math.min(320, Math.max(220, width * 0.62))
+    const boardEl = containerRef.current?.querySelector('.board') as HTMLDivElement | null
+    const boardRect = boardEl?.getBoundingClientRect()
+    const isNarrowViewport = width < 520
+    const bubbleWidth = Math.min(320, Math.max(220, width * (isNarrowViewport ? 0.74 : 0.62)))
     const bubbleHeight = 88
-    let baseX = Math.max(0, (width - bubbleWidth) / 2)
+    const boardCenteredX = containerRect && boardRect
+      ? (boardRect.left - containerRect.left) + (boardRect.width - bubbleWidth) / 2
+      : (width - bubbleWidth) / 2
+    let baseX = Math.max(0, Math.min(width - bubbleWidth, boardCenteredX))
     let baseY = Math.max(50, (height - bubbleHeight) / 2)
 
     if(containerRect && validMoves.length > 0){
-      const boardEl = containerRef.current?.querySelector('.board') as HTMLDivElement | null
       if(boardEl){
-        const boardRect = boardEl.getBoundingClientRect()
-        const boardLeft = boardRect.left - containerRect.left
-        const boardTop = boardRect.top - containerRect.top
-        const cellWidth = boardRect.width / 8
-        const cellHeight = boardRect.height / 8
+        const liveBoardRect = boardEl.getBoundingClientRect()
+        const boardLeft = liveBoardRect.left - containerRect.left
+        const boardTop = liveBoardRect.top - containerRect.top
+        const cellWidth = liveBoardRect.width / 8
+        const cellHeight = liveBoardRect.height / 8
 
         const rows = validMoves.map(([r]) => r)
         const cols = validMoves.map(([,c]) => c)
@@ -233,7 +238,7 @@ export default function App(){
           const belowY = avoid.bottom + margin
           const leftX = avoid.left - bubbleWidth - margin
           const rightX = avoid.right + margin
-          const centeredX = Math.max(0, Math.min(width - bubbleWidth, (width - bubbleWidth) / 2))
+          const centeredX = Math.max(0, Math.min(width - bubbleWidth, boardCenteredX))
           const centeredY = Math.max(0, Math.min(height - bubbleHeight, (height - bubbleHeight) / 2))
 
           const clampX = (x:number)=> Math.max(0, Math.min(width - bubbleWidth, x))
@@ -268,7 +273,7 @@ export default function App(){
     const bubble: TauntBubble = {
       id,
       text,
-      x: baseX + (Math.random() * 12 - 6),
+      x: baseX + (Math.random() * 8 - 4),
       y: baseY + (Math.random() * 12 - 6),
       vx: Math.random() * 16 - 8,
       vy: 8 + Math.random() * 6,
