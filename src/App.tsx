@@ -39,8 +39,11 @@ export default function App(){
   const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const historyWheelAccumRef = useRef(0)
-  const historyWheelResetTimerRef = useRef<number | undefined>()
+  const historyStepCarryRef = useRef(0)
+  const historyMomentumVelocityRef = useRef(0)
+  const historyMomentumFrameRef = useRef<number | undefined>()
+  const historyTouchLastYRef = useRef<number | null>(null)
+  const historyTouchLastTsRef = useRef<number | null>(null)
   const hadLatestGameOverRef = useRef(false)
 
   const current = history[historyIndex]
@@ -439,39 +442,117 @@ export default function App(){
     selectHistoryIndex(next)
   }
 
+  function cancelHistoryMomentum(){
+    if(historyMomentumFrameRef.current){
+      cancelAnimationFrame(historyMomentumFrameRef.current)
+      historyMomentumFrameRef.current = undefined
+    }
+  }
+
+  function applyHistoryStepDelta(stepDelta:number){
+    if(stepDelta === 0) return
+
+    historyStepCarryRef.current += stepDelta
+    let wholeSteps = 0
+    if(historyStepCarryRef.current > 0){
+      wholeSteps = Math.floor(historyStepCarryRef.current)
+    } else if(historyStepCarryRef.current < 0){
+      wholeSteps = Math.ceil(historyStepCarryRef.current)
+    }
+    if(wholeSteps === 0) return
+
+    historyStepCarryRef.current -= wholeSteps
+    const prev = historyIndexRef.current
+    const next = Math.max(0, Math.min(history.length - 1, prev + wholeSteps))
+    if(next !== prev){
+      selectHistoryFromPicker(next)
+      return
+    }
+
+    // Hit an edge: clear residual carry and damp momentum quickly.
+    historyStepCarryRef.current = 0
+    historyMomentumVelocityRef.current *= 0.2
+  }
+
+  function startHistoryMomentum(initialVelocityStepsPerSec:number){
+    historyMomentumVelocityRef.current = Math.max(-72, Math.min(72, initialVelocityStepsPerSec))
+    if(historyMomentumFrameRef.current) return
+
+    let lastTs = performance.now()
+    const tick = (ts:number)=>{
+      const dt = Math.min((ts - lastTs) / 1000, 0.05)
+      lastTs = ts
+
+      historyMomentumVelocityRef.current *= Math.exp(-9 * dt)
+      applyHistoryStepDelta(historyMomentumVelocityRef.current * dt)
+
+      if(Math.abs(historyMomentumVelocityRef.current) < 0.08){
+        cancelHistoryMomentum()
+        historyMomentumVelocityRef.current = 0
+        historyStepCarryRef.current = 0
+        return
+      }
+      historyMomentumFrameRef.current = requestAnimationFrame(tick) as unknown as number
+    }
+
+    historyMomentumFrameRef.current = requestAnimationFrame(tick) as unknown as number
+  }
+
   function handleHistoryPickerWheel(event: React.WheelEvent<HTMLDivElement>){
     event.preventDefault()
     event.stopPropagation()
 
-    historyWheelAccumRef.current += event.deltaY
-    const threshold = 42
+    // Immediate response while scrolling.
+    applyHistoryStepDelta(event.deltaY / 52)
 
-    while(historyWheelAccumRef.current >= threshold){
-      const next = Math.min(history.length - 1, historyIndexRef.current + 1)
-      selectHistoryFromPicker(next)
-      historyWheelAccumRef.current -= threshold
-    }
-    while(historyWheelAccumRef.current <= -threshold){
-      const next = Math.max(0, historyIndexRef.current - 1)
-      selectHistoryFromPicker(next)
-      historyWheelAccumRef.current += threshold
-    }
-
-    if(historyWheelResetTimerRef.current){
-      clearTimeout(historyWheelResetTimerRef.current)
-    }
-    historyWheelResetTimerRef.current = window.setTimeout(()=>{
-      historyWheelAccumRef.current = 0
-      historyWheelResetTimerRef.current = undefined
-    }, 130)
+    // Keep rolling after fast sweeps.
+    const boosted = historyMomentumVelocityRef.current + event.deltaY * 0.17
+    startHistoryMomentum(boosted)
   }
 
-  useEffect(()=>{
-    return ()=>{
-      if(historyWheelResetTimerRef.current){
-        clearTimeout(historyWheelResetTimerRef.current)
-      }
+  function handleHistoryTouchStartCapture(event: React.TouchEvent<HTMLDivElement>){
+    const touch = event.touches[0]
+    if(!touch) return
+    cancelHistoryMomentum()
+    historyMomentumVelocityRef.current = 0
+    historyStepCarryRef.current = 0
+    historyTouchLastYRef.current = touch.clientY
+    historyTouchLastTsRef.current = performance.now()
+  }
+
+  function handleHistoryTouchMoveCapture(event: React.TouchEvent<HTMLDivElement>){
+    const touch = event.touches[0]
+    if(!touch || historyTouchLastYRef.current === null || historyTouchLastTsRef.current === null) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const now = performance.now()
+    const dy = touch.clientY - historyTouchLastYRef.current
+    const dt = Math.max((now - historyTouchLastTsRef.current) / 1000, 0.008)
+
+    const stepDelta = dy / 40
+    applyHistoryStepDelta(stepDelta)
+    historyMomentumVelocityRef.current = stepDelta / dt
+
+    historyTouchLastYRef.current = touch.clientY
+    historyTouchLastTsRef.current = now
+  }
+
+  function handleHistoryTouchEndCapture(){
+    historyTouchLastYRef.current = null
+    historyTouchLastTsRef.current = null
+    const velocity = historyMomentumVelocityRef.current
+    if(Math.abs(velocity) > 0.55){
+      startHistoryMomentum(velocity)
+    } else {
+      historyMomentumVelocityRef.current = 0
+      historyStepCarryRef.current = 0
     }
+  }
+
+  useEffect(()=>()=>{
+    cancelHistoryMomentum()
   },[])
 
   useEffect(()=>{
@@ -571,7 +652,15 @@ export default function App(){
 
         <aside className="history">
           <strong>History</strong>
-          <div className="history-picker-wrap" role="group" aria-label="History picker" onWheel={handleHistoryPickerWheel}
+          <div
+            className="history-picker-wrap"
+            role="group"
+            aria-label="History picker"
+            onWheel={handleHistoryPickerWheel}
+            onTouchStartCapture={handleHistoryTouchStartCapture}
+            onTouchMoveCapture={handleHistoryTouchMoveCapture}
+            onTouchEndCapture={handleHistoryTouchEndCapture}
+            onTouchCancelCapture={handleHistoryTouchEndCapture}
           >
             <Picker
               className="history-picker"
