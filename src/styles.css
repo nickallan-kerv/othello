@@ -30,7 +30,6 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
 .board-preview-shell{width:var(--board-size);max-width:100%}
 .board-meta{display:flex;flex-direction:column;gap:2px;margin-top:2px;margin-bottom:2px;padding:0 0 0 14px}
 .board-meta-main{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.board-build{font-size:11px;color:#5b6b7a;letter-spacing:.02em}
 .board-score{white-space:nowrap}
 .board-ai-status{display:flex;align-items:center;gap:6px;color:#24507a;font-size:12px;font-weight:600;min-height:16px}
 .ai-spinner{
@@ -168,6 +167,7 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
   overflow:hidden;
   text-overflow:ellipsis;
 }
+.history-build{margin-top:8px;font-size:11px;color:#5b6b7a;letter-spacing:.02em}
 
 /* Last move highlights */
 /* stronger, more visible last-move highlights */
