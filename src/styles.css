@@ -68,13 +68,14 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
 .history{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .history-help{margin-top:6px;margin-bottom:8px;font-size:13px;color:#2b2b2b;font-weight:600;line-height:1.35}
 .history ol{margin-top:8px;padding-left:1.4rem;list-style-type:decimal;list-style-position:outside;max-height:8.6rem;overflow-y:auto;overflow-x:hidden;touch-action:none}
-.history li{margin:6px 0;padding:4px 6px;border-radius:8px;list-style-position:outside}
+.history li{margin:6px 0;padding:4px 6px;border-radius:8px;list-style-position:outside;white-space:nowrap}
 .history li::marker{color:#1f1f1f;font-weight:700}
 .history-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.history-row > span{min-width:0}
+.history-row > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history li.history-jumpable{cursor:pointer;background:rgba(20,90,200,0.09);border-left:4px solid rgba(20,90,200,0.55)}
 .history li.history-jumpable:hover{background:rgba(20,90,200,0.16);transform:translateX(1px)}
 .history-revert{border:none;background:none;padding:0;color:#174c96;font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer}
+.history-revert{flex:0 0 auto;white-space:nowrap}
 .history-revert:hover{color:#0f3a75}
 
 /* Last move highlights */
