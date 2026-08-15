@@ -568,24 +568,29 @@ export default function App(){
             <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
           </div>
           <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
-          <div className="history-help">Hover any move to preview. Double-click highlighted moves to jump back.</div>
+          <div className="history-help">Hover any move to preview. Use Revert on highlighted moves to jump back.</div>
           <ol>
             {history.map((entry, index) => (
               (()=>{
                 const isJumpable = index < historyIndex && (index === 0 || entry.move?.player === aiPlayer)
-                const jumpTitle = index === 0
-                  ? 'Double-click to restart from the beginning'
-                  : 'Double-click to jump back here (your turn next)'
                 return (
               <li
                 key={index}
                 className={isJumpable ? 'history-jumpable' : ''}
-                title={isJumpable ? jumpTitle : undefined}
                 onMouseEnter={()=>setHoveredHistoryIndex(index)}
-                onDoubleClick={()=>handleHistoryDoubleClick(index)}
                 style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}
               >
-                {index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}
+                <span>{index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}</span>
+                {isJumpable && (
+                  <button
+                    type="button"
+                    className="history-revert"
+                    onClick={()=>handleHistoryDoubleClick(index)}
+                    title={index === 0 ? 'Restart from the beginning' : 'Jump back to this move'}
+                  >
+                    Revert
+                  </button>
+                )}
               </li>
                 )
               })()
