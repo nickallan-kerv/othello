@@ -38,15 +38,18 @@ export default function App(){
   const historyIndexRef = useRef(0)
   const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
+  const [showHistoryWhiteHint, setShowHistoryWhiteHint] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const historyStepCarryRef = useRef(0)
   const historyMomentumVelocityRef = useRef(0)
   const historyMomentumFrameRef = useRef<number | undefined>()
+  const historyHintTimerRef = useRef<number | undefined>()
   const historyTouchLastYRef = useRef<number | null>(null)
   const historyTouchLastTsRef = useRef<number | null>(null)
   const hadLatestGameOverRef = useRef(false)
 
   const current = history[historyIndex]
+  const latestEntry = history[history.length - 1]
   const board = current.board
   const turn = current.turn
   const renderedEntry = current
@@ -503,11 +506,13 @@ export default function App(){
     event.stopPropagation()
 
     // Immediate response while scrolling.
-    applyHistoryStepDelta(event.deltaY / 52)
+    applyHistoryStepDelta(event.deltaY / 140)
 
-    // Keep rolling after fast sweeps.
-    const boosted = historyMomentumVelocityRef.current + event.deltaY * 0.17
-    startHistoryMomentum(boosted)
+    // Keep rolling only after strong sweep-like wheel gestures.
+    if(Math.abs(event.deltaY) > 180){
+      const boosted = historyMomentumVelocityRef.current + event.deltaY * 0.045
+      startHistoryMomentum(boosted)
+    }
   }
 
   function handleHistoryTouchStartCapture(event: React.TouchEvent<HTMLDivElement>){
@@ -551,8 +556,31 @@ export default function App(){
     }
   }
 
+  useEffect(()=>{
+    if(historyHintTimerRef.current){
+      clearTimeout(historyHintTimerRef.current)
+      historyHintTimerRef.current = undefined
+    }
+
+    const entry = history[historyIndex]
+    const shouldHint = !!entry && historyIndex > 0 && entry.move?.player === BLACK
+    if(!shouldHint){
+      setShowHistoryWhiteHint(false)
+      return
+    }
+
+    setShowHistoryWhiteHint(false)
+    historyHintTimerRef.current = window.setTimeout(()=>{
+      setShowHistoryWhiteHint(true)
+      historyHintTimerRef.current = undefined
+    }, 1000)
+  },[history, historyIndex])
+
   useEffect(()=>()=>{
     cancelHistoryMomentum()
+    if(historyHintTimerRef.current){
+      clearTimeout(historyHintTimerRef.current)
+    }
   },[])
 
   useEffect(()=>{
@@ -595,14 +623,32 @@ export default function App(){
     setHoveredMoveKey(null)
   }
 
+  function handlePlayAgain(){
+    cancelHistoryMomentum()
+    historyStepCarryRef.current = 0
+    historyMomentumVelocityRef.current = 0
+    setThinking(false)
+    setShouldAutoPlayAi(false)
+    setHoveredMoveKey(null)
+    setShowHistoryWhiteHint(false)
+    setTauntBubbles([])
+    hadLatestGameOverRef.current = false
+    const initial = [{ board: createInitialBoard(), turn: BLACK }]
+    setHistory(initial)
+    selectHistoryIndex(0)
+  }
+
   const sc = score(renderedBoard)
   const liveScore = score(board)
-  const liveGameOver = isGameOver(board)
-  const gameResultText = liveScore.black > liveScore.white
-    ? 'You win!'
-    : liveScore.black < liveScore.white
-      ? 'You lose!'
-      : 'Draw!'
+  const gameOverBoard = latestEntry.board
+  const gameOverScore = score(gameOverBoard)
+  const liveGameOver = isGameOver(gameOverBoard)
+  const showGameOverDialog = liveGameOver
+  const gameResultText = gameOverScore.black > gameOverScore.white
+    ? 'You win'
+    : gameOverScore.black < gameOverScore.white
+      ? 'I win'
+      : 'We draw'
 
   const historyPickerValue = useMemo(()=>({ step: String(historyIndex) }),[historyIndex])
 
@@ -619,23 +665,20 @@ export default function App(){
     <div className="container" ref={containerRef}>
       <div className="topbar">
         <h1>Othello</h1>
-        <div className="controls">
-          <label>Level:
-            <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div style={{marginTop:8, marginBottom:6}}>
-        <strong>Score:</strong> Black {liveScore.black}, White: {liveScore.white}
       </div>
 
       <div className="main">
         <div className="board-preview-shell">
+          <div className="board-meta">
+            <div className="board-score"><strong>Score:</strong> Black {liveScore.black}, White: {liveScore.white}</div>
+            <label className="board-difficulty">Difficulty:
+              <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+          </div>
           <Board
             board={renderedBoard}
             onCellClick={handleCellClick}
@@ -651,7 +694,12 @@ export default function App(){
         </div>
 
         <aside className="history">
-          <strong>History</strong>
+          <div className="history-header-row">
+            <strong>History</strong>
+            {showHistoryWhiteHint && (
+              <span className="history-inline-hint">Select a <em>white</em> move</span>
+            )}
+          </div>
           <div
             className="history-picker-wrap"
             role="group"
@@ -667,11 +715,17 @@ export default function App(){
               value={historyPickerValue}
               onChange={(value)=>{
                 const next = Number(value.step)
-                if(Number.isInteger(next)) selectHistoryFromPicker(next)
+                if(Number.isInteger(next)){
+                  selectHistoryFromPicker(next)
+                }
               }}
               wheelMode="off"
-              height={168}
-              itemHeight={56}
+              height={120}
+              itemHeight={40}
+              style={{
+                maskImage:'linear-gradient(to top, transparent 0%, rgba(255,255,255,0.85) 8%, white 16%, white 84%, rgba(255,255,255,0.85) 92%, transparent 100%)',
+                WebkitMaskImage:'linear-gradient(to top, transparent 0%, rgba(255,255,255,0.85) 8%, white 16%, white 84%, rgba(255,255,255,0.85) 92%, transparent 100%)'
+              }}
             >
               <Picker.Column name="step">
                 {history.map((_, index)=>(
@@ -686,6 +740,7 @@ export default function App(){
                 ))}
               </Picker.Column>
             </Picker>
+            <div className="history-picker-focus-overlay" aria-hidden />
           </div>
         </aside>
       </div>
@@ -698,7 +753,14 @@ export default function App(){
         ))}
       </div>
 
-      {liveGameOver && <div style={{marginTop:12}}><strong>{gameResultText}</strong></div>}
+      {showGameOverDialog && (
+        <div className="game-over-backdrop" role="presentation">
+          <div className="game-over-dialog" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
+            <h2 id="game-over-title" className="game-over-title">{gameResultText}</h2>
+            <button type="button" className="game-over-play-again" onClick={handlePlayAgain}>Play again</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
