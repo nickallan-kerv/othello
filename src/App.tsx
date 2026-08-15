@@ -237,8 +237,8 @@ export default function App(){
           const centeredY = Math.max(0, Math.min(height - bubbleHeight, (height - bubbleHeight) / 2))
 
           const candidates = [
-            { x: centeredX, y: aboveY, ok: aboveY >= 0 },
             { x: centeredX, y: belowY, ok: belowY + bubbleHeight <= height },
+            { x: centeredX, y: aboveY, ok: aboveY >= 0 },
             { x: leftX, y: centeredY, ok: leftX >= 0 },
             { x: rightX, y: centeredY, ok: rightX + bubbleWidth <= width }
           ].filter(c => c.ok)
