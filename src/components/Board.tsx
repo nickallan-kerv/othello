@@ -17,6 +17,8 @@ type Props = {
 
 export default function Board({board,onCellClick,onCellHover,onCellLeave,hints,validMap,lastPlacedKey,lastFlippedSet,previewFlippedSet,previewPlayer}:Props){
   const boardRef = useRef<HTMLDivElement | null>(null)
+  const axis = Array.from({ length: SIZE }, (_, index) => index + 1)
+  const rowAxis = [...axis].reverse()
 
   function hoverFromTouch(touch: Touch){
     const rect = boardRef.current?.getBoundingClientRect()
@@ -46,23 +48,37 @@ export default function Board({board,onCellClick,onCellHover,onCellLeave,hints,v
   }
 
   return (
-    <div
-      className="board"
-      role="grid"
-      ref={boardRef}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={()=>onCellLeave?.()}
-      onTouchCancel={()=>onCellLeave?.()}
-    >
-      {board.map((row,r)=>row.map((v,c)=>{
-        const key = `${r},${c}`
-        const isLastPlaced = lastPlacedKey === key
-        const isLastFlipped = !!lastFlippedSet?.has(key)
-        const isPreviewFlipped = !!previewFlippedSet?.has(key)
-        const previewValue = isPreviewFlipped ? (previewPlayer ?? undefined) : undefined
-        return <Cell key={key} value={v} onClick={()=>onCellClick(r,c)} onHoverStart={()=>onCellHover?.(r,c)} onHoverEnd={()=>onCellLeave?.()} showHint={!!hints && validMap?.has(key)} r={r} c={c} isLastPlaced={isLastPlaced} isLastFlipped={isLastFlipped} previewValue={previewValue} />
-      }))}
+    <div className="board-shell">
+      <div className="board-axis-col" aria-hidden>
+        {rowAxis.map(value => (
+          <span key={`row-${value}`}>{value}</span>
+        ))}
+      </div>
+
+      <div
+        className="board"
+        role="grid"
+        ref={boardRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={()=>onCellLeave?.()}
+        onTouchCancel={()=>onCellLeave?.()}
+      >
+        {board.map((row,r)=>row.map((v,c)=>{
+          const key = `${r},${c}`
+          const isLastPlaced = lastPlacedKey === key
+          const isLastFlipped = !!lastFlippedSet?.has(key)
+          const isPreviewFlipped = !!previewFlippedSet?.has(key)
+          const previewValue = isPreviewFlipped ? (previewPlayer ?? undefined) : undefined
+          return <Cell key={key} value={v} onClick={()=>onCellClick(r,c)} onHoverStart={()=>onCellHover?.(r,c)} onHoverEnd={()=>onCellLeave?.()} showHint={!!hints && validMap?.has(key)} r={r} c={c} isLastPlaced={isLastPlaced} isLastFlipped={isLastFlipped} previewValue={previewValue} />
+        }))}
+      </div>
+
+      <div className="board-axis-row" aria-hidden>
+        {axis.map(value => (
+          <span key={`col-${value}`}>{value}</span>
+        ))}
+      </div>
     </div>
   )
 }
