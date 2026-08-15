@@ -541,13 +541,20 @@ export default function App(){
   
 
   const sc = score(renderedBoard)
+  const liveScore = score(board)
+  const liveGameOver = isGameOver(board)
+  const gameResultText = liveScore.black > liveScore.white
+    ? 'You win!'
+    : liveScore.black < liveScore.white
+      ? 'You lose!'
+      : 'Draw!'
 
   return (
     <div className="container" ref={containerRef}>
       <div className="topbar">
         <h1>Othello</h1>
         <div className="controls">
-          <label>AI Level:
+          <label>Level:
             <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
               <option value="easy">Easy</option>
               <option value="medium">Medium</option>
@@ -566,6 +573,10 @@ export default function App(){
           }}>Reset</button>
           <button onClick={handleUndo} disabled={historyIndex===0}>Undo</button>
         </div>
+      </div>
+
+      <div style={{marginTop:8, marginBottom:6}}>
+        <strong>Score</strong> — Black: {liveScore.black} — White: {liveScore.white}
       </div>
 
       <div className="main">
@@ -633,7 +644,7 @@ export default function App(){
         ))}
       </div>
 
-      {isGameOver(renderedBoard) && <div style={{marginTop:12}}><strong>Game Over</strong></div>}
+      {liveGameOver && <div style={{marginTop:12}}><strong>{gameResultText}</strong></div>}
     </div>
   )
 }
