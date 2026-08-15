@@ -515,6 +515,7 @@ export default function App(){
 
   function handleHistoryTouchMove(event: React.TouchEvent<HTMLOListElement>){
     if(supportsHover) return
+    event.preventDefault()
     const touch = event.touches[0]
     if(!touch) return
 
