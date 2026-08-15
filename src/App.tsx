@@ -46,6 +46,9 @@ export default function App(){
   const containerRef = useRef<HTMLDivElement | null>(null)
   const historyRef = useRef<HTMLDivElement | null>(null)
   const historyTouchPreviewActiveRef = useRef(false)
+  const historyTouchPreviewTimerRef = useRef<number | undefined>()
+  const historyTouchStartPointRef = useRef<{x:number, y:number} | null>(null)
+  const historyTouchStartIndexRef = useRef<number | null>(null)
   const suppressHistoryTapRef = useRef(false)
   const hadLatestGameOverRef = useRef(false)
 
@@ -468,6 +471,14 @@ export default function App(){
     }
   },[supportsHover])
 
+  useEffect(()=>{
+    return ()=>{
+      if(historyTouchPreviewTimerRef.current){
+        clearTimeout(historyTouchPreviewTimerRef.current)
+      }
+    }
+  },[])
+
   function getHistoryIndexFromTouch(touch: Touch){
     const element = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null
     const historyItem = element?.closest('li[data-history-index]') as HTMLElement | null
@@ -482,27 +493,73 @@ export default function App(){
     if(!touch) return
     const index = getHistoryIndexFromTouch(touch)
     if(index === null) return
-    historyTouchPreviewActiveRef.current = true
+
+    if(historyTouchPreviewTimerRef.current){
+      clearTimeout(historyTouchPreviewTimerRef.current)
+    }
+
+    historyTouchPreviewActiveRef.current = false
     suppressHistoryTapRef.current = false
-    setIsTouchHistoryPreviewing(true)
-    setHoveredHistoryIndex(index)
+    historyTouchStartPointRef.current = { x: touch.clientX, y: touch.clientY }
+    historyTouchStartIndexRef.current = index
+
+    historyTouchPreviewTimerRef.current = window.setTimeout(()=>{
+      historyTouchPreviewActiveRef.current = true
+      suppressHistoryTapRef.current = true
+      setIsTouchHistoryPreviewing(true)
+      if(historyTouchStartIndexRef.current !== null){
+        setHoveredHistoryIndex(historyTouchStartIndexRef.current)
+      }
+    }, 260)
   }
 
   function handleHistoryTouchMove(event: React.TouchEvent<HTMLOListElement>){
-    if(supportsHover || !historyTouchPreviewActiveRef.current) return
-    event.preventDefault()
-    suppressHistoryTapRef.current = true
+    if(supportsHover) return
     const touch = event.touches[0]
     if(!touch) return
-    const index = getHistoryIndexFromTouch(touch)
-    if(index !== null){
-      setHoveredHistoryIndex(index)
+
+    if(historyTouchPreviewActiveRef.current){
+      event.preventDefault()
+      suppressHistoryTapRef.current = true
+      const index = getHistoryIndexFromTouch(touch)
+      if(index !== null){
+        setHoveredHistoryIndex(index)
+      }
+      return
     }
+
+    const start = historyTouchStartPointRef.current
+    if(start && historyTouchPreviewTimerRef.current){
+      const dx = touch.clientX - start.x
+      const dy = touch.clientY - start.y
+      if(Math.hypot(dx, dy) > 8){
+        clearTimeout(historyTouchPreviewTimerRef.current)
+        historyTouchPreviewTimerRef.current = undefined
+        historyTouchStartPointRef.current = null
+        historyTouchStartIndexRef.current = null
+      }
+    }
+
+    const index = getHistoryIndexFromTouch(touch)
+    if(index !== null) historyTouchStartIndexRef.current = index
   }
 
   function handleHistoryTouchEnd(){
     if(supportsHover) return
+    if(historyTouchPreviewTimerRef.current){
+      clearTimeout(historyTouchPreviewTimerRef.current)
+      historyTouchPreviewTimerRef.current = undefined
+    }
+
+    const wasPreviewing = historyTouchPreviewActiveRef.current
     historyTouchPreviewActiveRef.current = false
+    historyTouchStartPointRef.current = null
+    historyTouchStartIndexRef.current = null
+
+    if(wasPreviewing){
+      suppressHistoryTapRef.current = true
+    }
+
     setIsTouchHistoryPreviewing(false)
     setHoveredHistoryIndex(null)
   }
@@ -643,7 +700,7 @@ export default function App(){
           <div className="history-help">
             {supportsHover
               ? 'Hover any move to preview. Use Revert on highlighted moves to jump back.'
-              : 'Drag across history to preview. Tap a highlighted move or Revert to jump back.'}
+              : 'Press and hold a move, then drag to preview. Tap a highlighted move or Revert to jump back.'}
           </div>
           <ol
             onTouchStart={handleHistoryTouchStart}
@@ -671,17 +728,19 @@ export default function App(){
                 }}
                 style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}
               >
-                <span>{index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}</span>
-                {isJumpable && (
-                  <button
-                    type="button"
-                    className="history-revert"
-                    onClick={(event)=>{ event.stopPropagation(); handleHistoryDoubleClick(index) }}
-                    title={index === 0 ? 'Restart from the beginning' : 'Jump back to this move'}
-                  >
-                    Revert
-                  </button>
-                )}
+                <div className="history-row">
+                  <span>{index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}</span>
+                  {isJumpable && (
+                    <button
+                      type="button"
+                      className="history-revert"
+                      onClick={(event)=>{ event.stopPropagation(); handleHistoryDoubleClick(index) }}
+                      title={index === 0 ? 'Restart from the beginning' : 'Jump back to this move'}
+                    >
+                      Revert
+                    </button>
+                  )}
+                </div>
               </li>
                 )
               })()
