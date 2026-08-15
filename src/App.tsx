@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Board from './components/Board.js'
 import Picker from 'react-mobile-picker'
-import { createInitialBoard, BLACK, WHITE, Cell as CellType, getValidMoves, applyMove, score, randomMove, greedyMove, minimaxMove, isGameOver, opponent, flipsForMove } from './game/othello.js'
+import { createInitialBoard, BLACK, WHITE, Cell as CellType, getValidMoves, applyMove, score, randomMove, greedyMove, minimaxMove, isGameOver, opponent, flipsForMove, getAdaptiveSadisticDepth } from './game/othello.js'
 
 interface MoveRecord {
   player: CellType
@@ -11,10 +11,28 @@ interface MoveRecord {
   flipped?: [number,number][]
 }
 
+const AI_THINKING_PHRASES = [
+  'Poker face...',
+  'Suspicious pause...',
+  'Desperate improv...',
+  'Professional guessing...',
+  'Quantum thinking...',
+  'Engaging brain...',
+  'Summoning wisdom...',
+  'Thinking noises...',
+  'Strategic humming...',
+  'Definitely planned...',
+  'Not panicking...',
+  'Trust the process...'
+] as const
+
 export default function App(){
   const [player] = useState<CellType>(BLACK) // human
-  const [aiLevel,setAiLevel] = useState<'easy'|'medium'|'hard'>('medium')
+  const [aiLevel,setAiLevel] = useState<'easy'|'medium'|'hard'|'sadistic'>('medium')
   const [thinking,setThinking] = useState(false)
+  const [aiStatusText, setAiStatusText] = useState<string>(AI_THINKING_PHRASES[0])
+  const [aiPhase, setAiPhase] = useState<'idle'|'waiting-render'|'waiting-delay'|'thinking'>('idle')
+  const [showHelpDialog, setShowHelpDialog] = useState(false)
   const [usedEndGameTaunts, setUsedEndGameTaunts] = useState<Set<string>>(new Set())
   const [endGameTaunt, setEndGameTaunt] = useState('')
   const [history, setHistory] = useState<Array<{ board: CellType[][], turn: CellType, move?: MoveRecord }>>(()=>[
@@ -22,7 +40,6 @@ export default function App(){
   ])
   const [historyIndex, setHistoryIndex] = useState(0)
   const historyIndexRef = useRef(0)
-  const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
   const [showHistoryWhiteHint, setShowHistoryWhiteHint] = useState(false)
   const historyStepCarryRef = useRef(0)
@@ -32,6 +49,10 @@ export default function App(){
   const historyTouchLastYRef = useRef<number | null>(null)
   const historyTouchLastTsRef = useRef<number | null>(null)
   const hadLatestGameOverRef = useRef(false)
+  const aiWorkerRef = useRef<Worker | null>(null)
+  const aiWorkerJobIdRef = useRef(0)
+  const aiPhraseDeckRef = useRef<string[]>([])
+  const lastAiPhraseRef = useRef<string | null>(null)
 
   const current = history[historyIndex]
   const latestEntry = history[history.length - 1]
@@ -121,6 +142,82 @@ export default function App(){
     return new Set(flips.map(([rr,cc])=>`${rr},${cc}`))
   },[hoveredMoveKey, player, turn, validMoveFlipsMap])
 
+  const aiDelayMs = aiLevel === 'easy' || aiLevel === 'medium' ? 1000 : 0
+
+  function nextAiPhrase(){
+    if(aiPhraseDeckRef.current.length === 0){
+      const deck = [...AI_THINKING_PHRASES]
+      for(let i = deck.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[deck[i], deck[j]] = [deck[j], deck[i]]
+      }
+
+      if(deck.length > 1 && deck[deck.length - 1] === lastAiPhraseRef.current){
+        ;[deck[deck.length - 1], deck[deck.length - 2]] = [deck[deck.length - 2], deck[deck.length - 1]]
+      }
+
+      aiPhraseDeckRef.current = deck
+    }
+
+    const next = aiPhraseDeckRef.current.pop() ?? AI_THINKING_PHRASES[0]
+    lastAiPhraseRef.current = next
+    return next
+  }
+
+  async function chooseAiMove(boardState: CellType[][], turnState: CellType){
+    const hardwareThreads = typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+      ? navigator.hardwareConcurrency
+      : 8
+    const depth = aiLevel === 'hard'
+      ? 6
+      : aiLevel === 'sadistic'
+        ? getAdaptiveSadisticDepth(boardState, turnState, hardwareThreads)
+        : 0
+
+    if(typeof Worker === 'undefined'){
+      if(aiLevel === 'easy') return randomMove(boardState, turnState)
+      if(aiLevel === 'medium') return greedyMove(boardState, turnState)
+      return minimaxMove(boardState, turnState, depth)
+    }
+
+    if(!aiWorkerRef.current){
+      aiWorkerRef.current = new Worker(new URL('./game/aiWorker.ts', import.meta.url), { type: 'module' })
+    }
+
+    const worker = aiWorkerRef.current
+    const jobId = ++aiWorkerJobIdRef.current
+
+    return await new Promise<{r:number,c:number} | null>((resolve)=>{
+      function cleanup(){
+        worker.removeEventListener('message', onMessage)
+        worker.removeEventListener('error', onError)
+      }
+
+      function onMessage(event: MessageEvent){
+        const data = event.data as { jobId?: number, move?: {r:number,c:number} | null }
+        if(data?.jobId !== jobId) return
+        cleanup()
+        resolve(data.move ?? null)
+      }
+
+      function onError(){
+        cleanup()
+        if(aiLevel === 'easy') resolve(randomMove(boardState, turnState))
+        else if(aiLevel === 'medium') resolve(greedyMove(boardState, turnState))
+        else resolve(minimaxMove(boardState, turnState, depth))
+      }
+
+      worker.addEventListener('message', onMessage)
+      worker.addEventListener('error', onError)
+      worker.postMessage({ jobId, board: boardState, turn: turnState, depth, level: aiLevel, hardwareThreads })
+    })
+  }
+
+  useEffect(()=>()=>{
+    aiWorkerRef.current?.terminate()
+    aiWorkerRef.current = null
+  },[])
+
   const isAtLatestHistory = historyIndex === history.length - 1
 
   useEffect(()=>{
@@ -151,36 +248,65 @@ export default function App(){
         const newIndex = trimmed.length - 1
         setHistory(trimmed)
         selectHistoryIndex(newIndex)
+        setAiPhase('idle')
         return
       }
 
-    if(!shouldAutoPlayAi) return
+    if(aiPhase === 'waiting-render') return
 
+    if(aiPhase === 'waiting-delay'){
+      const timerId = window.setTimeout(()=>{
+        setAiPhase('thinking')
+      }, aiDelayMs)
+      return ()=>clearTimeout(timerId)
+    }
+
+    if(aiPhase !== 'thinking') return
+
+    let cancelled = false
     const doAi = async ()=>{
       setThinking(true)
-      await new Promise(r=>setTimeout(r,350))
-      let mv = null
-      if(aiLevel==='easy') mv = randomMove(board,turn)
-      else if(aiLevel==='medium') mv = greedyMove(board,turn)
-      else mv = minimaxMove(board,turn,6)
+      const mv = await chooseAiMove(board, turn)
+      if(cancelled) return
+
       if(mv){
         const nb = applyMove(board,mv.r,mv.c,turn)
-          if(nb){
-            const sc = score(nb)
-            const flips = flipsForMove(history[historyIndex].board, mv.r, mv.c, turn)
-            const nextHistory = history.slice(0, historyIndex+1)
-            const newHistory = [...nextHistory, { board: nb, turn: turn===BLACK?WHITE:BLACK, move: { player: turn, r: mv.r, c: mv.c, score: sc, flipped: flips }}]
-            const trimmed = trimHistoryAfterGameOver(newHistory)
-            const newIndex = trimmed.length - 1
-            setHistory(trimmed)
-            selectHistoryIndex(newIndex)
-          }
+        if(nb){
+          const sc = score(nb)
+          const flips = flipsForMove(history[historyIndex].board, mv.r, mv.c, turn)
+          const nextHistory = history.slice(0, historyIndex+1)
+          const newHistory = [...nextHistory, { board: nb, turn: turn===BLACK?WHITE:BLACK, move: { player: turn, r: mv.r, c: mv.c, score: sc, flipped: flips }}]
+          const trimmed = trimHistoryAfterGameOver(newHistory)
+          const newIndex = trimmed.length - 1
+          setHistory(trimmed)
+          selectHistoryIndex(newIndex)
+        }
       }
+
       setThinking(false)
-      setShouldAutoPlayAi(false)
+      setAiPhase('idle')
     }
     doAi()
-  },[turn,aiLevel,board,player,history,historyIndex,shouldAutoPlayAi,validMoves])
+
+    return ()=>{
+      cancelled = true
+      setThinking(false)
+    }
+  },[turn,aiDelayMs,aiPhase,board,player,history,historyIndex,isAtLatestHistory,validMoves])
+
+  useEffect(()=>{
+    if(aiPhase !== 'waiting-render') return
+    const fallback = window.setTimeout(()=>{
+      setAiPhase(aiDelayMs > 0 ? 'waiting-delay' : 'thinking')
+    }, 150)
+    return ()=>clearTimeout(fallback)
+  },[aiDelayMs, aiPhase])
+
+  function handleBoardCommitPaint(committedValue: CellType){
+    if(aiPhase !== 'waiting-render') return
+    if(committedValue !== player) return
+    setAiPhase(aiDelayMs > 0 ? 'waiting-delay' : 'thinking')
+  }
 
   function pushHistory(nextBoard:CellType[][], nextTurn:CellType, move: MoveRecord){
     setHistory(prevHistory => {
@@ -203,7 +329,7 @@ export default function App(){
   function selectHistoryFromPicker(next:number){
     if(next === historyIndex) return
     setHoveredMoveKey(null)
-    setShouldAutoPlayAi(false)
+    setAiPhase('idle')
     selectHistoryIndex(next)
   }
 
@@ -325,7 +451,7 @@ export default function App(){
     }
 
     const entry = history[historyIndex]
-    const shouldHint = !!entry && historyIndex > 0 && entry.move?.player === BLACK
+    const shouldHint = !!entry && historyIndex > 0 && entry.move?.player === BLACK && entry.turn === BLACK
     if(!shouldHint){
       setShowHistoryWhiteHint(false)
       return
@@ -372,7 +498,8 @@ export default function App(){
     if(!nb) return
     const sc = score(nb)
     pushHistory(nb, WHITE, { player, r, c, score: sc, flipped: flips })
-    setShouldAutoPlayAi(true)
+    setAiStatusText(nextAiPhrase())
+    setAiPhase('waiting-render')
   }
 
   function handleCellHover(r:number,c:number){
@@ -393,7 +520,7 @@ export default function App(){
     historyStepCarryRef.current = 0
     historyMomentumVelocityRef.current = 0
     setThinking(false)
-    setShouldAutoPlayAi(false)
+    setAiPhase('idle')
     setHoveredMoveKey(null)
     setShowHistoryWhiteHint(false)
     setEndGameTaunt('')
@@ -407,6 +534,7 @@ export default function App(){
   const gameOverBoard = latestEntry.board
   const gameOverScore = score(gameOverBoard)
   const liveGameOver = isGameOver(gameOverBoard)
+  const showAiSpinner = aiPhase !== 'idle' && isAtLatestHistory && turn !== player && !liveGameOver
   const showGameOverDialog = liveGameOver
   const gameResultKey: 'win' | 'lose' | 'draw' = gameOverScore.black > gameOverScore.white
     ? 'win'
@@ -427,38 +555,56 @@ export default function App(){
 
   const historyPickerValue = useMemo(()=>({ step: String(historyIndex) }),[historyIndex])
 
+  function toOthelloCoordinate(r:number, c:number){
+    const files = 'abcdefgh'
+    return `${files[c] ?? '?'}${r + 1}`
+  }
+
   function formatHistoryLabel(index:number){
     const entry = history[index]
     if(!entry) return 'Unknown move'
     if(index === 0) return 'Start'
     if(!entry.move) return 'Unknown move'
     if(entry.move.r === -1) return 'Pass'
-    return `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`
+    return `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${toOthelloCoordinate(entry.move.r, entry.move.c)}`
   }
 
   return (
     <div className="container">
       <div className="topbar">
         <h1>Othello</h1>
+        <div className="topbar-center">
+          {showAiSpinner && (
+            <div className="board-ai-status" role="status" aria-live="polite">
+              <span className="ai-spinner" aria-hidden />
+              <span>{aiStatusText}</span>
+            </div>
+          )}
+        </div>
+        <button type="button" className="topbar-instructions" onClick={()=>setShowHelpDialog(true)}>Instructions</button>
       </div>
 
       <div className="main">
         <div className="board-preview-shell">
           <div className="board-meta">
-            <div className="board-score"><strong>Score:</strong> Black {liveScore.black}, White: {liveScore.white}</div>
-            <label className="board-difficulty">Difficulty:
-              <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-            </label>
+            <div className="board-meta-main">
+              <div className="board-score"><strong>Score:</strong> Black {liveScore.black}, White: {liveScore.white}</div>
+              <label className="board-difficulty">Difficulty:
+                <select value={aiLevel} onChange={e=>setAiLevel(e.target.value as any)}>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                  <option value="sadistic">Sadistic</option>
+                </select>
+              </label>
+            </div>
           </div>
           <Board
             board={renderedBoard}
             onCellClick={handleCellClick}
             onCellHover={handleCellHover}
             onCellLeave={handleCellLeave}
+            onCommitPaint={handleBoardCommitPaint}
             hints={turn===player}
             validMap={validMap}
             lastPlacedKey={lastPlacedKey}
@@ -526,6 +672,26 @@ export default function App(){
             <h2 id="game-over-title" className="game-over-title">{gameResultText}</h2>
             {endGameTaunt && <p className="game-over-taunt">{endGameTaunt}</p>}
             <button type="button" className="game-over-play-again" onClick={handlePlayAgain}>Play again</button>
+          </div>
+        </div>
+      )}
+
+      {showHelpDialog && (
+        <div className="help-backdrop" role="presentation" onClick={(event)=>{
+          if(event.target === event.currentTarget){
+            setShowHelpDialog(false)
+          }
+        }}>
+          <div className="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title">
+            <h2 id="help-title" className="help-title">Instructions</h2>
+            <ol className="help-list">
+              <li>You are Black, and Black moves first.</li>
+              <li>Each move must trap one or more opponent disks in a straight line.</li>
+              <li>Trapped disks flip to your color.</li>
+              <li>If you can't move, your turn is skipped.</li>
+              <li>When no moves remain, the player with the most disks wins.</li>
+            </ol>
+            <button type="button" className="help-close" onClick={()=>setShowHelpDialog(false)}>Close</button>
           </div>
         </div>
       )}
