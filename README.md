@@ -1,6 +1,6 @@
 # Othello
 
-A single-player browser implementation of Othello (Reversi) built with React, TypeScript, and Vite.
+A single-player browser implementation of Othello (Reversi) built with React, TypeScript, and Vite. Play online here: https://nickallan-kerv.github.io/othello/
 
 ![Othello gameplay](docs/Gameplay.png)
 
