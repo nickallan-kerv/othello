@@ -700,8 +700,8 @@ export default function App(){
           <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
           <div className="history-help">
             {supportsHover
-              ? 'Hover any move to preview. Use Revert on highlighted moves to jump back.'
-              : 'Press and hold a move, then drag to preview. Tap a highlighted move or Revert to jump back.'}
+              ? 'Hover any move to preview.'
+              : 'Press and hold a move, then drag to preview. Tap a highlighted move to jump back.'}
           </div>
           <ol
             onTouchStart={handleHistoryTouchStart}
