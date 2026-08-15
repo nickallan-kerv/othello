@@ -62,37 +62,6 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
 .face.black{background:#111}
 .face.white{background:#eee}
 
-.taunt-layer{position:absolute;inset:0;pointer-events:none;z-index:12;overflow:hidden}
-.taunt-bubble{
-  position:absolute;
-  left:0;
-  top:0;
-  max-width:320px;
-  padding:10px 14px;
-  border:3px solid #121212;
-  border-radius:16px;
-  background:#fffdf2;
-  color:#111;
-  font-family:"Comic Sans MS","Trebuchet MS",cursive;
-  font-size:14px;
-  line-height:1.25;
-  box-shadow:0 8px 0 #121212, 0 12px 22px rgba(0,0,0,0.30);
-  transform-origin:center;
-  will-change:transform,opacity;
-}
-.taunt-bubble::after{
-  content:'';
-  position:absolute;
-  left:22px;
-  bottom:-16px;
-  width:0;
-  height:0;
-  border-left:10px solid transparent;
-  border-right:4px solid transparent;
-  border-top:16px solid #fffdf2;
-  filter:drop-shadow(-2px 3px 0 #121212);
-}
-
 /* Layout for main area: board on left, history on right */
 .main{display:flex;gap:20px;align-items:flex-start;margin-top:12px}
 .board-preview-shell .board{transition:opacity .2s ease, filter .2s ease}
@@ -200,6 +169,13 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
   color:#173e68;
 }
 
+.game-over-taunt{
+  margin:10px 0 0;
+  color:#2f455c;
+  font-size:0.97rem;
+  line-height:1.35;
+}
+
 .game-over-play-again{
   margin-top:16px;
   border:none;
@@ -225,5 +201,4 @@ body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px}
   .board-preview-shell{width:100%}
   .history{width:100%;height:auto;max-height:none;padding-left:0;padding-top:10px;border-left:none;border-top:2px solid rgba(0,0,0,0.08);overflow-x:hidden}
   .history-picker-wrap{height:7.5rem;flex:0 0 auto}
-  .taunt-bubble{max-width:min(78vw,320px)}
 }
