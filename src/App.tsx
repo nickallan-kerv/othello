@@ -702,11 +702,11 @@ export default function App(){
         </div>
 
         <aside ref={el=>historyRef.current = el as HTMLDivElement | null} className="history" onMouseLeave={()=>setHoveredHistoryIndex(null)}>
-          <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
+          <strong>History</strong>
           <div className="history-help">
             {supportsHover
               ? 'Hover any move to preview.'
-              : 'Press and hold a move, then drag to preview. Tap a highlighted move to jump back.'}
+              : 'Hold and drag a move to preview. Tap a highlighted move to jump back.'}
           </div>
           <ol
             ref={historyListRef}
