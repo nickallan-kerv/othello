@@ -514,14 +514,6 @@ export default function App(){
     setHoveredMoveKey(null)
   }
 
-  function handleUndo(){
-    const step = historyIndex % 2 === 0 ? 2 : 1
-    const next = Math.max(historyIndex - step, 0)
-    selectHistoryIndex(next)
-    setTauntBubbles([])
-    setShouldAutoPlayAi(false)
-  }
-
   const sc = score(renderedBoard)
   const liveScore = score(board)
   const liveGameOver = isGameOver(board)
@@ -554,16 +546,6 @@ export default function App(){
               <option value="hard">Hard</option>
             </select>
           </label>
-          <button onClick={()=>{
-            const initial = createInitialBoard()
-            setHistory([{ board: initial, turn: BLACK }])
-            selectHistoryIndex(0)
-            setShouldAutoPlayAi(false)
-            setUsedTaunts(new Set())
-            setTauntBubbles([])
-            hadLatestGameOverRef.current = false
-          }}>Reset</button>
-          <button onClick={handleUndo} disabled={historyIndex===0}>Undo</button>
         </div>
       </div>
 
