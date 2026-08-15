@@ -7,6 +7,7 @@ import {
   EMPTY,
   flipsForMove,
   getValidMoves,
+  getAdaptiveSadisticDepth,
   greedyMove,
   isGameOver,
   minimaxMove,
@@ -147,5 +148,38 @@ describe('othello engine', () => {
     expect(whiteMv).not.toBeNull()
     const whiteKeys = new Set(getValidMoves(blackToMoveNoMoves, WHITE).map(([r, c]) => `${r},${c}`))
     expect(whiteKeys.has(`${whiteMv?.r},${whiteMv?.c}`)).toBe(true)
+  })
+
+  test('adaptive sadistic depth stays bounded and scales down on weaker devices', () => {
+    const board = createInitialBoard()
+
+    const strongDeviceDepth = getAdaptiveSadisticDepth(board, BLACK, 8)
+    const weakDeviceDepth = getAdaptiveSadisticDepth(board, BLACK, 2)
+
+    expect(strongDeviceDepth).toBeGreaterThanOrEqual(4)
+    expect(strongDeviceDepth).toBeLessThanOrEqual(10)
+    expect(weakDeviceDepth).toBeGreaterThanOrEqual(4)
+    expect(weakDeviceDepth).toBeLessThanOrEqual(10)
+    expect(weakDeviceDepth).toBeLessThanOrEqual(strongDeviceDepth)
+  })
+
+  test('adaptive sadistic depth increases in constrained late-game positions', () => {
+    const opening = createInitialBoard()
+    const lateGame = boardFrom([
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWW.WWWW',
+      'WWWBWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+    ])
+
+    const openingDepth = getAdaptiveSadisticDepth(opening, BLACK, 8)
+    const lateDepth = getAdaptiveSadisticDepth(lateGame, WHITE, 8)
+
+    expect(lateDepth).toBeGreaterThanOrEqual(openingDepth)
+    expect(lateDepth).toBeLessThanOrEqual(10)
   })
 })
