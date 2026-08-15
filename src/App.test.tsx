@@ -102,7 +102,7 @@ describe('App history picker interactions', () => {
     vi.useFakeTimers()
     const { container } = render(<App />)
 
-    const level = screen.getByLabelText('Level:') as HTMLSelectElement
+    const level = screen.getByLabelText('Difficulty:') as HTMLSelectElement
 
     fireEvent.change(level, { target: { value: 'easy' } })
     clickFirstValidMove(container)
@@ -121,7 +121,9 @@ describe('App history picker interactions', () => {
 
     render(<App />)
 
-    expect(screen.getByText('You win!')).toBeTruthy()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('You win')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Play again' })).toBeTruthy()
     expect(document.body.textContent || '').toContain('Black 64, White: 0')
     createSpy.mockRestore()
   })
