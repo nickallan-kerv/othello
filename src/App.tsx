@@ -39,6 +39,7 @@ export default function App(){
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
   const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const historyRef = useRef<HTMLDivElement | null>(null)
   const hadLatestGameOverRef = useRef(false)
 
   const current = history[historyIndex]
@@ -191,18 +192,78 @@ export default function App(){
     const containerRect = containerRef.current?.getBoundingClientRect()
     const width = containerRect?.width ?? 900
     const height = containerRect?.height ?? 620
-    const bubbleWidth = Math.min(320, Math.max(220, width * 0.7))
-    const baseX = Math.max(0, (width - bubbleWidth) / 2)
-    const baseY = Math.max(120, height * 0.46)
+    const bubbleWidth = Math.min(320, Math.max(220, width * 0.62))
+    const bubbleHeight = 88
+    let baseX = Math.max(0, (width - bubbleWidth) / 2)
+    let baseY = Math.max(50, (height - bubbleHeight) / 2)
+
+    if(containerRect && validMoves.length > 0){
+      const boardEl = containerRef.current?.querySelector('.board') as HTMLDivElement | null
+      if(boardEl){
+        const boardRect = boardEl.getBoundingClientRect()
+        const boardLeft = boardRect.left - containerRect.left
+        const boardTop = boardRect.top - containerRect.top
+        const cellWidth = boardRect.width / 8
+        const cellHeight = boardRect.height / 8
+
+        const rows = validMoves.map(([r]) => r)
+        const cols = validMoves.map(([,c]) => c)
+        const minRow = Math.min(...rows)
+        const maxRow = Math.max(...rows)
+        const minCol = Math.min(...cols)
+        const maxCol = Math.max(...cols)
+
+        // Approximate the full hint zone and add padding so taunts remain clearly separate.
+        const avoid = {
+          left: boardLeft + minCol * cellWidth + cellWidth * 0.12,
+          top: boardTop + minRow * cellHeight + cellHeight * 0.12,
+          right: boardLeft + (maxCol + 1) * cellWidth - cellWidth * 0.12,
+          bottom: boardTop + (maxRow + 1) * cellHeight - cellHeight * 0.12
+        }
+
+        const intersectsAvoid = (x:number, y:number)=>{
+          const right = x + bubbleWidth
+          const bottom = y + bubbleHeight
+          return x < avoid.right && right > avoid.left && y < avoid.bottom && bottom > avoid.top
+        }
+
+        if(intersectsAvoid(baseX, baseY)){
+          const margin = 14
+          const aboveY = avoid.top - bubbleHeight - margin
+          const belowY = avoid.bottom + margin
+          const leftX = avoid.left - bubbleWidth - margin
+          const rightX = avoid.right + margin
+          const centeredX = Math.max(0, Math.min(width - bubbleWidth, (width - bubbleWidth) / 2))
+          const centeredY = Math.max(0, Math.min(height - bubbleHeight, (height - bubbleHeight) / 2))
+
+          const candidates = [
+            { x: centeredX, y: aboveY, ok: aboveY >= 0 },
+            { x: centeredX, y: belowY, ok: belowY + bubbleHeight <= height },
+            { x: leftX, y: centeredY, ok: leftX >= 0 },
+            { x: rightX, y: centeredY, ok: rightX + bubbleWidth <= width }
+          ].filter(c => c.ok)
+
+          if(candidates.length > 0){
+            const chosen = candidates[0]
+            baseX = chosen.x
+            baseY = chosen.y
+          }
+        }
+
+        baseX = Math.max(0, Math.min(width - bubbleWidth, baseX))
+        baseY = Math.max(0, Math.min(height - bubbleHeight, baseY))
+      }
+    }
+
     const id = nextTauntBubbleId.current++
 
     const bubble: TauntBubble = {
       id,
       text,
-      x: baseX + (Math.random() * 18 - 9),
-      y: baseY + (Math.random() * 20 - 10),
-      vx: Math.random() * 24 - 12,
-      vy: -(18 + Math.random() * 5),
+      x: baseX + (Math.random() * 12 - 6),
+      y: baseY + (Math.random() * 12 - 6),
+      vx: Math.random() * 16 - 8,
+      vy: 8 + Math.random() * 6,
       age: 0,
       opacity: 1
     }
@@ -273,7 +334,6 @@ export default function App(){
   },[hoveredMoveKey, player, turn, validMoveFlipsMap])
 
   const isAtLatestHistory = historyIndex === history.length - 1
-  const historyRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(()=>{
     if(!isAtLatestHistory) return
