@@ -11,26 +11,12 @@ interface MoveRecord {
   flipped?: [number,number][]
 }
 
-interface TauntBubble {
-  id: number
-  text: string
-  x: number
-  y: number
-  vx: number
-  vy: number
-  age: number
-  opacity: number
-}
-
 export default function App(){
   const [player] = useState<CellType>(BLACK) // human
   const [aiLevel,setAiLevel] = useState<'easy'|'medium'|'hard'>('medium')
   const [thinking,setThinking] = useState(false)
-  const [tauntBubbles,setTauntBubbles] = useState<TauntBubble[]>([])
-  const nextTauntBubbleId = useRef(1)
-  const tauntAnimFrame = useRef<number | undefined>()
-  const tauntLastTs = useRef<number | undefined>()
-  const [usedTaunts, setUsedTaunts] = useState<Set<string>>(new Set())
+  const [usedEndGameTaunts, setUsedEndGameTaunts] = useState<Set<string>>(new Set())
+  const [endGameTaunt, setEndGameTaunt] = useState('')
   const [history, setHistory] = useState<Array<{ board: CellType[][], turn: CellType, move?: MoveRecord }>>(()=>[
     { board: createInitialBoard(), turn: BLACK }
   ])
@@ -39,7 +25,6 @@ export default function App(){
   const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
   const [showHistoryWhiteHint, setShowHistoryWhiteHint] = useState(false)
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const historyStepCarryRef = useRef(0)
   const historyMomentumVelocityRef = useRef(0)
   const historyMomentumFrameRef = useRef<number | undefined>()
@@ -68,273 +53,58 @@ export default function App(){
     historyIndexRef.current = historyIndex
   },[historyIndex])
 
-  // Expanded taunt pools with Monty-Python-style silly name-calling (lighthearted)
-  const tauntPools = useMemo(()=>({
-    bigPlayerLead: [
-      "This is preposterous — you jammy codpiece!",
-      "By the saints, you're a flukey, pudding-brained ninny!",
-      "I protest! You absolute berk of extraordinary majesty!",
-      "You blithering, bungling popinjay of triumph!",
-      "Egad, you're a triumphant, cushy-witted scallywag!",
-      "Fiddle-dee, what a splendidly stupid victory you carve!",
-      "Zounds! A most improbable, scrumptious fluke you've pulled!",
-      "You incorrigible, plummy-headed conqueror of discs!",
-      "By Jove, your play is like warm custard — oddly effective!",
-      "I bow to your muffin-brained brilliance."
-    ],
-    medPlayerLead: [
-      "You daft, bubble-headed scoundrel — well played.",
-      "I'll have you know this was just training wheels, you plonker.",
-      "Careful, you might start believing your own flummery.",
-      "Bravo, you splendid, noodle-headed strategist.",
-      "Marvellous — a cunning little turn from you, you scone-brained elf.",
-      "You're making me look careless, you tart-faced prodigy.",
-      "Dazzling! A tricksy, whimsical coup, you little berk.",
-      "A fine turn, you prat with a plan.",
-      "Good show, you perspicacious turnip.",
-      "I concede — momentarily — to your plucky brilliance."
-    ],
-    smallPlayerLead: [
-      "You're ahead — but don't crow yet, you cheeky sod.",
-      "Steady on, you splendid oaf, the game's not over.",
-      "Nice — don't let it go to your head, you daft git.",
-      "A tidy move, you curious muffin.",
-      "Keep it up, you brilliant, bungling genius.",
-      "Well played, you soft-headed marvel.",
-      "Oh ho, you're making faces at fortune, you sly turnip.",
-      "A neat flip, you merry dodger.",
-      "Clever — like a fox in a hat, you rascal.",
-      "Tuning your racket nicely, you honey-headed chap."
-    ],
-    neutral: [
-      "It's anyone's game — don't be a prat.",
-      "Lovely move, you cunning turnip.",
-      "Tension! Keep your wits, you eccentric codswallop.",
-      "A jolly tussle — keep at it, you plum-headed champion.",
-      "Splendid! The board's a kettle of surprises.",
-      "Nicely done — you're a right sprightly noodle.",
-      "Oh, the suspense! Carry on, you curious radish.",
-      "A patient plod of strategy — bravo, you little toff.",
-      "Fun times — behave like a sensible cabbage.",
-      "Goodness me, this is a proper dashing duel."
-    ],
-    smallAiLead: [
-      "I was merely toying with you, you muddle-headed twerp.",
-      "Oh dear, you slipped — easily done for a muppet.",
-      "Perhaps next time, try not to be so splendiferously inept.",
-      "A small advantage — don't blubber, you noodly fellow.",
-      "I nibble at your heels, you charmingly vacant goon.",
-      "Careful now, the tide favors me, you daft cucumber.",
-      "A slight lead; you might need a stronger spoon next time.",
-      "Tempting mistake — well observed from my side, you clumsy toddle.",
-      "It's little things that add up, you lovely dunderhead.",
-      "I'm merely prodigious in small ways, you delectable prat."
-    ],
-    medAiLead: [
-      "I say, that was child's play — you confounded twit.",
-      "Honestly, you handle defeat like a fainting turnip.",
-      "One might call that a lesson, you dreadful nincompoop.",
-      "Tsk — a proper rout if you keep at that pace, you blathering prat.",
-      "Consider this a demonstration, you silly, soppy wretch.",
-      "You're being educational — thank you for the example, you doltish chap.",
-      "A most instructive blunder you offered there, you noodle.",
-      "I find this sport restful; you find it enlightening, you bungling cad.",
-      "Hardly a challenge — but, bless you, you tried, you ploppy toff.",
-      "A tidy error; I applaud your generous contribution, you softheaded twit."
-    ],
-    bigAiLead: [
-      "Too easy — you ridiculous, soggy-bottomed worm!",
-      "Is that your best? You perfidious, dribbling codger.",
-      "I could nap and still outplay you, you blithering wazzock.",
-      "Absolute triumph — you magnificent, splenetic turnip.",
-      "A crushing display; your tactics are delightfully tragic, you plonking muffin.",
-      "I'm impressed by your consistency at making mistakes, you prat of note.",
-      "My dear, you've invented a new form of error, you puffy-necked beast.",
-      "What a spectacle — you, a glorious, befuddled doofus.",
-      "I shall write about your approximately dreadful moves, you soggy prat.",
-      "Rest assured, I remain unimpressed by your culinary-level strategy."
-    ]
-  }), [])
-
-  function pickTaunt(diff:number){
-    // diff = black - white (positive -> human leading)
-    let pool:string[]
-    if(diff >= 12) pool = tauntPools.bigPlayerLead
-    else if(diff >= 5) pool = tauntPools.medPlayerLead
-    else if(diff >= 1) pool = tauntPools.smallPlayerLead
-    else if(diff <= -12) pool = tauntPools.bigAiLead
-    else if(diff <= -5) pool = tauntPools.medAiLead
-    else if(diff <= -1) pool = tauntPools.smallAiLead
-    else pool = tauntPools.neutral
-
-    // filter pool by unused taunts to reduce repetition
-    const available = pool.filter(t => !usedTaunts.has(t))
-    let choice: string
-    if(available.length === 0){
-      // all used, reset used for this pool
-      // remove pool items from used set
-      setUsedTaunts(prev => {
-        const next = new Set(prev)
-        pool.forEach(p=> next.delete(p))
-        return next
-      })
-      choice = pool[Math.floor(Math.random()*pool.length)]
-    } else {
-      choice = available[Math.floor(Math.random()*available.length)]
+  const endGameTauntPools = useMemo(()=>(
+    {
+      win: [
+        'A narrow edge, but still yours. Nicely played.',
+        'You outmaneuvered me at the end. Well done.',
+        'Strong finish. You earned that win.',
+        'You kept your shape and closed it out. Respect.',
+        'I walked into that trap. Good game.',
+        'Calm choices, clean ending. You win.',
+        'You read the board better this time. Nice one.',
+        'You took control at the right moment. Well played.'
+      ],
+      lose: [
+        'I take this round. Want another?',
+        'Good fight. I managed the late game better.',
+        'I win this one, but it was close.',
+        'Endgame discipline paid off for me there.',
+        'That corner sequence decided it. I win.',
+        'I held parity until the break came. Good game.',
+        'I found the better closing line this time.',
+        'I got the final swing. Rematch?'
+      ],
+      draw: [
+        'Dead even. Nice balance all the way through.',
+        'A draw. Neither side gave much away.',
+        'Level finish. That was a tight game.',
+        'We split it perfectly. Good one.',
+        'No winner this time. Solid play both sides.',
+        'Drawn game. Margins were razor thin.',
+        'Balanced from start to finish. We draw.',
+        'Nothing between us at the end. Draw.'
+      ]
     }
-    // mark chosen taunt as used
-    setUsedTaunts(prev => {
+  ),[])
+
+  function pickEndGameTaunt(result:'win'|'lose'|'draw'){
+    const pool = endGameTauntPools[result]
+    const available = pool.filter(t => !usedEndGameTaunts.has(t))
+    const options = available.length > 0 ? available : pool
+    const choice = options[Math.floor(Math.random() * options.length)]
+
+    setUsedEndGameTaunts(prev => {
       const next = new Set(prev)
+      if(available.length === 0){
+        pool.forEach(item => next.delete(item))
+      }
       next.add(choice)
       return next
     })
+
     return choice
   }
-
-  function spawnTauntBubble(text:string){
-    const containerRect = containerRef.current?.getBoundingClientRect()
-    const width = containerRect?.width ?? 900
-    const height = containerRect?.height ?? 620
-    const boardEl = containerRef.current?.querySelector('.board') as HTMLDivElement | null
-    const boardRect = boardEl?.getBoundingClientRect()
-    const isNarrowViewport = width < 520
-    const bubbleWidth = Math.min(320, Math.max(220, width * (isNarrowViewport ? 0.74 : 0.62)))
-    const bubbleHeight = 88
-    const boardCenteredX = containerRect && boardRect
-      ? (boardRect.left - containerRect.left) + (boardRect.width - bubbleWidth) / 2
-      : (width - bubbleWidth) / 2
-    let baseX = Math.max(0, Math.min(width - bubbleWidth, boardCenteredX))
-    let baseY = Math.max(50, (height - bubbleHeight) / 2)
-
-    if(containerRect && validMoves.length > 0){
-      if(boardEl){
-        const liveBoardRect = boardEl.getBoundingClientRect()
-        const boardLeft = liveBoardRect.left - containerRect.left
-        const boardTop = liveBoardRect.top - containerRect.top
-        const cellWidth = liveBoardRect.width / 8
-        const cellHeight = liveBoardRect.height / 8
-
-        const rows = validMoves.map(([r]) => r)
-        const cols = validMoves.map(([,c]) => c)
-        const minRow = Math.min(...rows)
-        const maxRow = Math.max(...rows)
-        const minCol = Math.min(...cols)
-        const maxCol = Math.max(...cols)
-
-        // Approximate the full hint zone and add padding so taunts remain clearly separate.
-        const avoid = {
-          left: boardLeft + minCol * cellWidth + cellWidth * 0.12,
-          top: boardTop + minRow * cellHeight + cellHeight * 0.12,
-          right: boardLeft + (maxCol + 1) * cellWidth - cellWidth * 0.12,
-          bottom: boardTop + (maxRow + 1) * cellHeight - cellHeight * 0.12
-        }
-
-        const intersectsAvoid = (x:number, y:number)=>{
-          const right = x + bubbleWidth
-          const bottom = y + bubbleHeight
-          return x < avoid.right && right > avoid.left && y < avoid.bottom && bottom > avoid.top
-        }
-
-        if(intersectsAvoid(baseX, baseY)){
-          const margin = 14
-          const aboveY = avoid.top - bubbleHeight - margin
-          const belowY = avoid.bottom + margin
-          const leftX = avoid.left - bubbleWidth - margin
-          const rightX = avoid.right + margin
-          const centeredX = Math.max(0, Math.min(width - bubbleWidth, boardCenteredX))
-          const centeredY = Math.max(0, Math.min(height - bubbleHeight, (height - bubbleHeight) / 2))
-
-          const clampX = (x:number)=> Math.max(0, Math.min(width - bubbleWidth, x))
-          const clampY = (y:number)=> Math.max(0, Math.min(height - bubbleHeight, y))
-          const placed = (x:number, y:number)=>{
-            const px = clampX(x)
-            const py = clampY(y)
-            return { x: px, y: py, intersects: intersectsAvoid(px, py) }
-          }
-
-          const candidates = [
-            placed(centeredX, belowY),
-            placed(leftX, centeredY),
-            placed(rightX, centeredY),
-            placed(centeredX, aboveY)
-          ]
-
-          const chosen = candidates.find(c => !c.intersects)
-          if(chosen){
-            baseX = chosen.x
-            baseY = chosen.y
-          }
-        }
-
-        baseX = Math.max(0, Math.min(width - bubbleWidth, baseX))
-        baseY = Math.max(0, Math.min(height - bubbleHeight, baseY))
-      }
-    }
-
-    const id = nextTauntBubbleId.current++
-
-    const bubble: TauntBubble = {
-      id,
-      text,
-      x: baseX + (Math.random() * 8 - 4),
-      y: baseY + (Math.random() * 12 - 6),
-      vx: Math.random() * 16 - 8,
-      vy: 8 + Math.random() * 6,
-      age: 0,
-      opacity: 1
-    }
-
-    setTauntBubbles(prev => {
-      const next = [...prev, bubble]
-      return next.slice(-3)
-    })
-  }
-
-  useEffect(()=>{
-    if(tauntBubbles.length===0){
-      if(tauntAnimFrame.current) cancelAnimationFrame(tauntAnimFrame.current)
-      tauntAnimFrame.current = undefined
-      tauntLastTs.current = undefined
-      return
-    }
-
-    const gravity = 22
-    const driftDamping = 0.998
-    const fadeStartAge = 2.4
-
-    const tick = (ts:number)=>{
-      const prevTs = tauntLastTs.current ?? ts
-      const dt = Math.min((ts - prevTs) / 1000, 0.05)
-      tauntLastTs.current = ts
-
-      setTauntBubbles(prev => prev
-        .map((b, index, all) => {
-          const vx = b.vx * driftDamping
-          const vy = b.vy + gravity * dt
-          const x = b.x + vx * dt
-          const y = b.y + vy * dt
-          const age = b.age + dt
-          const falling = vy > 0
-          const isOldestOfThree = all.length >= 3 && index === 0
-          const fadeRate = isOldestOfThree ? 1.45 : (falling ? 0.22 : 0.07)
-          const fadeStart = isOldestOfThree ? 0.1 : fadeStartAge
-          const opacityLoss = age > fadeStart ? dt * fadeRate : 0
-          const opacity = Math.max(0, b.opacity - opacityLoss)
-          return { ...b, x, y, vx, vy, age, opacity }
-        })
-        .filter(b => b.opacity > 0.02 && b.age < 18 && b.y < 1200)
-      )
-
-      tauntAnimFrame.current = window.requestAnimationFrame(tick) as unknown as number
-    }
-
-    tauntAnimFrame.current = window.requestAnimationFrame(tick) as unknown as number
-    return ()=>{
-      if(tauntAnimFrame.current) cancelAnimationFrame(tauntAnimFrame.current)
-      tauntAnimFrame.current = undefined
-      tauntLastTs.current = undefined
-    }
-  },[tauntBubbles.length])
 
   const validMoves = useMemo(()=> getValidMoves(board,turn),[board,turn])
   const validMap = useMemo(()=> new Set(validMoves.map(([r,c])=>`${r},${c}`)),[validMoves])
@@ -381,9 +151,6 @@ export default function App(){
         const newIndex = trimmed.length - 1
         setHistory(trimmed)
         selectHistoryIndex(newIndex)
-        const diff = sc.black - sc.white
-        const message = pickTaunt(diff)
-        spawnTauntBubble(message)
         return
       }
 
@@ -407,10 +174,6 @@ export default function App(){
             const newIndex = trimmed.length - 1
             setHistory(trimmed)
             selectHistoryIndex(newIndex)
-            // show highlight for this AI move (no temporary expiry)
-            const diff = sc.black - sc.white
-            const message = pickTaunt(diff)
-            spawnTauntBubble(message)
           }
       }
       setThinking(false)
@@ -441,7 +204,6 @@ export default function App(){
     if(next === historyIndex) return
     setHoveredMoveKey(null)
     setShouldAutoPlayAi(false)
-    setTauntBubbles([])
     selectHistoryIndex(next)
   }
 
@@ -590,14 +352,17 @@ export default function App(){
   },[turn, player])
 
   useEffect(()=>{
-    const latestGameOver = isAtLatestHistory && isGameOver(board)
+    const latestGameOver = isGameOver(latestEntry.board)
     if(latestGameOver && !hadLatestGameOverRef.current){
-      const sc = score(board)
-      const message = pickTaunt(sc.black - sc.white)
-      spawnTauntBubble(message)
+      const sc = score(latestEntry.board)
+      const result: 'win' | 'lose' | 'draw' = sc.black > sc.white ? 'win' : (sc.black < sc.white ? 'lose' : 'draw')
+      setEndGameTaunt(pickEndGameTaunt(result))
+    }
+    if(!latestGameOver){
+      setEndGameTaunt('')
     }
     hadLatestGameOverRef.current = latestGameOver
-  },[board, isAtLatestHistory])
+  },[history])
 
   function handleCellClick(r:number,c:number){
     if(turn!==player) return
@@ -631,24 +396,34 @@ export default function App(){
     setShouldAutoPlayAi(false)
     setHoveredMoveKey(null)
     setShowHistoryWhiteHint(false)
-    setTauntBubbles([])
+    setEndGameTaunt('')
     hadLatestGameOverRef.current = false
     const initial = [{ board: createInitialBoard(), turn: BLACK }]
     setHistory(initial)
     selectHistoryIndex(0)
   }
 
-  const sc = score(renderedBoard)
   const liveScore = score(board)
   const gameOverBoard = latestEntry.board
   const gameOverScore = score(gameOverBoard)
   const liveGameOver = isGameOver(gameOverBoard)
   const showGameOverDialog = liveGameOver
+  const gameResultKey: 'win' | 'lose' | 'draw' = gameOverScore.black > gameOverScore.white
+    ? 'win'
+    : gameOverScore.black < gameOverScore.white
+      ? 'lose'
+      : 'draw'
   const gameResultText = gameOverScore.black > gameOverScore.white
     ? 'You win'
     : gameOverScore.black < gameOverScore.white
       ? 'I win'
       : 'We draw'
+
+  useEffect(()=>{
+    if(showGameOverDialog && !endGameTaunt){
+      setEndGameTaunt(pickEndGameTaunt(gameResultKey))
+    }
+  },[endGameTaunt, gameResultKey, showGameOverDialog])
 
   const historyPickerValue = useMemo(()=>({ step: String(historyIndex) }),[historyIndex])
 
@@ -662,7 +437,7 @@ export default function App(){
   }
 
   return (
-    <div className="container" ref={containerRef}>
+    <div className="container">
       <div className="topbar">
         <h1>Othello</h1>
       </div>
@@ -745,18 +520,11 @@ export default function App(){
         </aside>
       </div>
 
-      <div className="taunt-layer" aria-hidden>
-        {tauntBubbles.map(b=> (
-          <div key={b.id} className="taunt-bubble" style={{transform:`translate(${b.x}px, ${b.y}px)`, opacity:b.opacity}}>
-            {b.text}
-          </div>
-        ))}
-      </div>
-
       {showGameOverDialog && (
         <div className="game-over-backdrop" role="presentation">
           <div className="game-over-dialog" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
             <h2 id="game-over-title" className="game-over-title">{gameResultText}</h2>
+            {endGameTaunt && <p className="game-over-taunt">{endGameTaunt}</p>}
             <button type="button" className="game-over-play-again" onClick={handlePlayAgain}>Play again</button>
           </div>
         </div>
