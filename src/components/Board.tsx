@@ -7,6 +7,7 @@ type Props = {
   onCellClick: (r:number,c:number)=>void,
   onCellHover?: (r:number,c:number)=>void,
   onCellLeave?: ()=>void,
+  onCommitPaint?: (value: CellType)=>void,
   hints?: boolean,
   validMap?: Set<string>
   lastPlacedKey?: string | null,
@@ -15,10 +16,10 @@ type Props = {
   previewPlayer?: CellType | null
 }
 
-export default function Board({board,onCellClick,onCellHover,onCellLeave,hints,validMap,lastPlacedKey,lastFlippedSet,previewFlippedSet,previewPlayer}:Props){
+export default function Board({board,onCellClick,onCellHover,onCellLeave,onCommitPaint,hints,validMap,lastPlacedKey,lastFlippedSet,previewFlippedSet,previewPlayer}:Props){
   const boardRef = useRef<HTMLDivElement | null>(null)
-  const axis = Array.from({ length: SIZE }, (_, index) => index + 1)
-  const rowAxis = [...axis].reverse()
+  const rankAxis = Array.from({ length: SIZE }, (_, index) => index + 1)
+  const fileAxis = Array.from({ length: SIZE }, (_, index) => String.fromCharCode(97 + index))
 
   function hoverFromTouch(touch: Touch){
     const rect = boardRef.current?.getBoundingClientRect()
@@ -49,8 +50,8 @@ export default function Board({board,onCellClick,onCellHover,onCellLeave,hints,v
 
   return (
     <div className="board-shell">
-      <div className="board-axis-col" aria-hidden>
-        {rowAxis.map(value => (
+      <div className="board-axis-col board-axis-col-left" aria-hidden>
+        {rankAxis.map(value => (
           <span key={`row-${value}`}>{value}</span>
         ))}
       </div>
@@ -70,13 +71,13 @@ export default function Board({board,onCellClick,onCellHover,onCellLeave,hints,v
           const isLastFlipped = !!lastFlippedSet?.has(key)
           const isPreviewFlipped = !!previewFlippedSet?.has(key)
           const previewValue = isPreviewFlipped ? (previewPlayer ?? undefined) : undefined
-          return <Cell key={key} value={v} onClick={()=>onCellClick(r,c)} onHoverStart={()=>onCellHover?.(r,c)} onHoverEnd={()=>onCellLeave?.()} showHint={!!hints && validMap?.has(key)} r={r} c={c} isLastPlaced={isLastPlaced} isLastFlipped={isLastFlipped} previewValue={previewValue} />
+          return <Cell key={key} value={v} onClick={()=>onCellClick(r,c)} onHoverStart={()=>onCellHover?.(r,c)} onHoverEnd={()=>onCellLeave?.()} onCommitPaint={onCommitPaint} showHint={!!hints && validMap?.has(key)} r={r} c={c} isLastPlaced={isLastPlaced} isLastFlipped={isLastFlipped} previewValue={previewValue} />
         }))}
       </div>
 
-      <div className="board-axis-row" aria-hidden>
-        {axis.map(value => (
-          <span key={`col-${value}`}>{value}</span>
+      <div className="board-axis-row board-axis-row-bottom" aria-hidden>
+        {fileAxis.map(value => (
+          <span key={`col-bottom-${value}`}>{value}</span>
         ))}
       </div>
     </div>
