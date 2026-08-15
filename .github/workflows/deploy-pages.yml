@@ -30,8 +30,16 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Set build ID
+        run: echo "VITE_BUILD_ID=${GITHUB_SHA::7}-$(date -u +%Y%m%d%H%M%S)" >> $GITHUB_ENV
+
       - name: Build
         run: npm run build
+
+      - name: Write version file
+        run: |
+          echo "$VITE_BUILD_ID" > dist/version.txt
+          echo "Built and deployed version: $VITE_BUILD_ID"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
