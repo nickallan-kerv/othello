@@ -45,6 +45,7 @@ export default function App(){
   const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const historyRef = useRef<HTMLDivElement | null>(null)
+  const historyListRef = useRef<HTMLOListElement | null>(null)
   const historyTouchPreviewActiveRef = useRef(false)
   const historyTouchPreviewTimerRef = useRef<number | undefined>()
   const historyTouchStartPointRef = useRef<{x:number, y:number} | null>(null)
@@ -453,10 +454,14 @@ export default function App(){
   }
 
   useEffect(()=>{
-    if(historyRef.current){
-      historyRef.current.scrollTop = historyRef.current.scrollHeight
+    const list = historyListRef.current
+    if(!list) return
+
+    const active = list.querySelector(`li[data-history-index="${historyIndex}"]`) as HTMLLIElement | null
+    if(active){
+      active.scrollIntoView({ block: 'nearest' })
     }
-  },[history])
+  },[historyIndex, history.length])
 
   useEffect(()=>{
     if(hoveredHistoryIndex !== null && hoveredHistoryIndex >= history.length){
@@ -704,6 +709,7 @@ export default function App(){
               : 'Press and hold a move, then drag to preview. Tap a highlighted move to jump back.'}
           </div>
           <ol
+            ref={historyListRef}
             onTouchStart={handleHistoryTouchStart}
             onTouchMove={handleHistoryTouchMove}
             onTouchEnd={handleHistoryTouchEnd}
