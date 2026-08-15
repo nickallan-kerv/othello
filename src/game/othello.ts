@@ -79,6 +79,33 @@ export function greedyMove(board:Cell[][], player:Cell){
   return {r:best[0], c:best[1]}
 }
 
+export function getAdaptiveSadisticDepth(board:Cell[][], player:Cell, hardwareThreads=8){
+  const moves = getValidMoves(board, player)
+  const legalMoves = moves.length
+
+  let empties = 0
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(board[r][c]===EMPTY) empties++
+
+  let depth = 8
+
+  // Wider branching in open positions quickly explodes minimax cost.
+  if(legalMoves >= 12) depth -= 2
+  else if(legalMoves >= 9) depth -= 1
+
+  // Opening is naturally wide; late game can usually afford deeper search.
+  if(empties >= 40) depth -= 1
+  if(empties <= 16) depth += 1
+  if(empties <= 10 && legalMoves <= 6) depth += 1
+
+  // Apply a conservative adjustment for lower-core devices.
+  if(hardwareThreads <= 4) depth -= 1
+  if(hardwareThreads <= 2) depth -= 1
+
+  if(depth < 4) depth = 4
+  if(depth > 10) depth = 10
+  return depth
+}
+
 function evaluate(board:Cell[][], player:Cell){
   const s = score(board)
   // disc difference (perspective of `player`)
