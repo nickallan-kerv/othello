@@ -73,6 +73,15 @@ A single-player browser implementation of Othello (Reversi) built with React, Ty
 - `npm run test` - Run tests once with Vitest
 - `npm run test:watch` - Run tests in watch mode
 
+## GitHub Pages Freshness Check
+
+- Each Pages deployment now stamps a unique build ID into the app UI and publishes `version.txt`.
+- After pushing to `master`, wait for the `Deploy to GitHub Pages` workflow to complete.
+- Verify the live deployment by checking:
+	- App UI line near the score: `Build <id>`
+	- `https://nickallan-kerv.github.io/othello/version.txt`
+- If the build ID and `version.txt` match the latest workflow run, users are seeing the newest release.
+
 ## Test Suite
 
 Install dependencies (if not already installed):
