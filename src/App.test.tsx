@@ -4,9 +4,29 @@ import { describe, expect, test, vi } from 'vitest'
 import App from './App.js'
 import * as othello from './game/othello.js'
 
-async function advanceAiTurn() {
+async function advanceAiRenderGate() {
   await act(async () => {
-    vi.advanceTimersByTime(450)
+    vi.advanceTimersByTime(220)
+    await Promise.resolve()
+  })
+}
+
+async function advanceAiDelay(ms: number) {
+  await act(async () => {
+    vi.advanceTimersByTime(ms)
+    await Promise.resolve()
+  })
+}
+
+async function advanceAiTurn() {
+  await advanceAiRenderGate()
+  await advanceAiDelay(1000)
+}
+
+async function flushUpdates() {
+  await act(async () => {
+    vi.advanceTimersByTime(40)
+    await Promise.resolve()
   })
 }
 
@@ -106,13 +126,92 @@ describe('App history picker interactions', () => {
 
     fireEvent.change(level, { target: { value: 'easy' } })
     clickFirstValidMove(container)
-    await advanceAiTurn()
+    await advanceAiRenderGate()
+    await advanceAiDelay(999)
+    expect(currentHistoryLabel()).toContain('Black @')
+    await advanceAiDelay(1)
+    expect(currentHistoryLabel()).toContain('White @')
+
+    fireEvent.change(level, { target: { value: 'medium' } })
+    clickFirstValidMove(container)
+    await advanceAiRenderGate()
+    await advanceAiDelay(999)
+    expect(currentHistoryLabel()).toContain('Black @')
+    await advanceAiDelay(1)
     expect(currentHistoryLabel()).toContain('White @')
 
     fireEvent.change(level, { target: { value: 'hard' } })
     clickFirstValidMove(container)
-    await advanceAiTurn()
+    await advanceAiRenderGate()
+    await flushUpdates()
     expect(currentHistoryLabel()).toContain('White @')
+
+    fireEvent.change(level, { target: { value: 'sadistic' } })
+    clickFirstValidMove(container)
+    await advanceAiRenderGate()
+    await flushUpdates()
+    expect(currentHistoryLabel()).toContain('White @')
+  })
+
+  test('shows and clears AI thinking spinner for all difficulties', async () => {
+    vi.useFakeTimers()
+    const { container } = render(<App />)
+    const level = screen.getByLabelText('Difficulty:') as HTMLSelectElement
+
+    const runCase = async (difficulty: 'easy' | 'medium' | 'hard' | 'sadistic') => {
+      fireEvent.change(level, { target: { value: difficulty } })
+      clickFirstValidMove(container)
+
+      const status = screen.getByRole('status')
+      expect(status).toBeTruthy()
+      expect((status.textContent || '').trim().length > 0).toBe(true)
+
+      await advanceAiRenderGate()
+      if (difficulty === 'easy' || difficulty === 'medium') {
+        await advanceAiDelay(1000)
+      } else {
+        await flushUpdates()
+      }
+
+      expect(screen.queryByRole('status')).toBeNull()
+      expect(currentHistoryLabel()).toContain('White @')
+    }
+
+    await runCase('easy')
+    await runCase('medium')
+    await runCase('hard')
+    await runCase('sadistic')
+  })
+
+  test('help dialog opens and closes from the help link', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Instructions' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Instructions' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  test('renders compact coordinate layout and history labels use coordinate notation', () => {
+    vi.useFakeTimers()
+    const { container } = render(<App />)
+
+    const bottomAxis = container.querySelector('.board-axis-row-bottom')
+    const topAxis = container.querySelector('.board-axis-row-top')
+    const leftAxis = container.querySelector('.board-axis-col-left')
+    const rightAxis = container.querySelector('.board-axis-col-right')
+    expect(bottomAxis?.textContent).toContain('abcdefgh')
+    expect(topAxis).toBeNull()
+    expect(leftAxis?.textContent).toContain('12345678')
+    expect(rightAxis).toBeNull()
+
+    const level = screen.getByLabelText('Difficulty:') as HTMLSelectElement
+    fireEvent.change(level, { target: { value: 'easy' } })
+    clickFirstValidMove(container)
+    expect(currentHistoryLabel()).toMatch(/^Black @ [a-h][1-8]$/)
   })
 
   test('game-over state shows winner text for terminal board', () => {
