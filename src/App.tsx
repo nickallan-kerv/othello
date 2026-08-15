@@ -36,6 +36,10 @@ export default function App(){
   const [historyIndex, setHistoryIndex] = useState(0)
   const historyIndexRef = useRef(0)
   const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
+  const [supportsHover, setSupportsHover] = useState<boolean>(() => {
+    if(typeof window === 'undefined') return true
+    return window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  })
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
   const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -46,10 +50,10 @@ export default function App(){
   const board = current.board
   const turn = current.turn
   const aiPlayer = opponent(player)
-  const previewEntry = hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
+  const previewEntry = supportsHover && hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
   const renderedEntry = previewEntry ?? current
   const renderedBoard = renderedEntry.board
-  const isHistoryPreviewing = hoveredHistoryIndex !== null
+  const isHistoryPreviewing = supportsHover && hoveredHistoryIndex !== null
   const displayedHistoryStep = hoveredHistoryIndex ?? historyIndex
 
   // compute last-move highlights for rendering (always show for selected history entry)
@@ -64,6 +68,17 @@ export default function App(){
   useEffect(()=>{
     historyIndexRef.current = historyIndex
   },[historyIndex])
+
+  useEffect(()=>{
+    if(typeof window === 'undefined') return
+    const media = window.matchMedia('(hover: hover) and (pointer: fine)')
+    const onChange = (event: MediaQueryListEvent)=>{
+      setSupportsHover(event.matches)
+    }
+    setSupportsHover(media.matches)
+    media.addEventListener('change', onChange)
+    return ()=> media.removeEventListener('change', onChange)
+  },[])
 
   // Expanded taunt pools with Monty-Python-style silly name-calling (lighthearted)
   const tauntPools = useMemo(()=>({
@@ -444,6 +459,12 @@ export default function App(){
   },[history.length, hoveredHistoryIndex])
 
   useEffect(()=>{
+    if(!supportsHover){
+      setHoveredHistoryIndex(null)
+    }
+  },[supportsHover])
+
+  useEffect(()=>{
     if(turn !== player || !isAtLatestHistory){
       setHoveredMoveKey(null)
     }
@@ -568,7 +589,11 @@ export default function App(){
             <strong>Score</strong> — Black: {sc.black} — White: {sc.white}
           </div>
           <strong>History</strong> — Step {displayedHistoryStep} of {history.length-1}
-          <div className="history-help">Hover any move to preview. Use Revert on highlighted moves to jump back.</div>
+          <div className="history-help">
+            {supportsHover
+              ? 'Hover any move to preview. Use Revert on highlighted moves to jump back.'
+              : 'Tap a highlighted move or Revert to jump back.'}
+          </div>
           <ol>
             {history.map((entry, index) => (
               (()=>{
@@ -577,7 +602,8 @@ export default function App(){
               <li
                 key={index}
                 className={isJumpable ? 'history-jumpable' : ''}
-                onMouseEnter={()=>setHoveredHistoryIndex(index)}
+                onMouseEnter={()=>{ if(supportsHover) setHoveredHistoryIndex(index) }}
+                onClick={()=>{ if(!supportsHover && isJumpable) handleHistoryDoubleClick(index) }}
                 style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}
               >
                 <span>{index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}</span>
@@ -585,7 +611,7 @@ export default function App(){
                   <button
                     type="button"
                     className="history-revert"
-                    onClick={()=>handleHistoryDoubleClick(index)}
+                    onClick={(event)=>{ event.stopPropagation(); handleHistoryDoubleClick(index) }}
                     title={index === 0 ? 'Restart from the beginning' : 'Jump back to this move'}
                   >
                     Revert
