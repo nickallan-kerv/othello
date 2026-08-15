@@ -682,7 +682,7 @@ export default function App(){
       </div>
 
       <div style={{marginTop:8, marginBottom:6}}>
-        <strong>Score</strong> — Black: {liveScore.black} — White: {liveScore.white}
+        <strong>Score:</strong> Black {liveScore.black}, White: {liveScore.white}
       </div>
 
       <div className="main">
@@ -706,7 +706,7 @@ export default function App(){
           <div className="history-help">
             {supportsHover
               ? 'Hover any move to preview.'
-              : 'Hold and drag a move to preview. Tap a highlighted move to jump back.'}
+              : 'Hold and drag a move to preview.'}
           </div>
           <ol
             ref={historyListRef}
