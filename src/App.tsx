@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Board from './components/Board.js'
+import Picker from 'react-mobile-picker'
 import { createInitialBoard, BLACK, WHITE, Cell as CellType, getValidMoves, applyMove, score, randomMove, greedyMove, minimaxMove, isGameOver, opponent, flipsForMove } from './game/othello.js'
 
 interface MoveRecord {
@@ -36,32 +37,17 @@ export default function App(){
   const [historyIndex, setHistoryIndex] = useState(0)
   const historyIndexRef = useRef(0)
   const [shouldAutoPlayAi, setShouldAutoPlayAi] = useState(false)
-  const [supportsHover, setSupportsHover] = useState<boolean>(() => {
-    if(typeof window === 'undefined') return true
-    return window.matchMedia('(hover: hover) and (pointer: fine)').matches
-  })
-  const [isTouchHistoryPreviewing, setIsTouchHistoryPreviewing] = useState(false)
   const [hoveredMoveKey, setHoveredMoveKey] = useState<string | null>(null)
-  const [hoveredHistoryIndex, setHoveredHistoryIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const historyRef = useRef<HTMLDivElement | null>(null)
-  const historyListRef = useRef<HTMLOListElement | null>(null)
-  const historyTouchPreviewActiveRef = useRef(false)
-  const historyTouchPreviewTimerRef = useRef<number | undefined>()
-  const historyTouchStartPointRef = useRef<{x:number, y:number} | null>(null)
-  const historyTouchStartIndexRef = useRef<number | null>(null)
-  const suppressHistoryTapRef = useRef(false)
+  const historyWheelAccumRef = useRef(0)
+  const historyWheelResetTimerRef = useRef<number | undefined>()
   const hadLatestGameOverRef = useRef(false)
 
   const current = history[historyIndex]
   const board = current.board
   const turn = current.turn
-  const aiPlayer = opponent(player)
-  const previewEntry = (supportsHover || isTouchHistoryPreviewing) && hoveredHistoryIndex !== null ? history[hoveredHistoryIndex] : null
-  const renderedEntry = previewEntry ?? current
+  const renderedEntry = current
   const renderedBoard = renderedEntry.board
-  const isHistoryPreviewing = (supportsHover || isTouchHistoryPreviewing) && hoveredHistoryIndex !== null
-  const displayedHistoryStep = hoveredHistoryIndex ?? historyIndex
 
   // compute last-move highlights for rendering (always show for selected history entry)
   const lastMove = renderedEntry.move ?? null
@@ -75,17 +61,6 @@ export default function App(){
   useEffect(()=>{
     historyIndexRef.current = historyIndex
   },[historyIndex])
-
-  useEffect(()=>{
-    if(typeof window === 'undefined') return
-    const media = window.matchMedia('(hover: hover) and (pointer: fine)')
-    const onChange = (event: MediaQueryListEvent)=>{
-      setSupportsHover(event.matches)
-    }
-    setSupportsHover(media.matches)
-    media.addEventListener('change', onChange)
-    return ()=> media.removeEventListener('change', onChange)
-  },[])
 
   // Expanded taunt pools with Monty-Python-style silly name-calling (lighthearted)
   const tauntPools = useMemo(()=>({
@@ -305,7 +280,7 @@ export default function App(){
 
     setTauntBubbles(prev => {
       const next = [...prev, bubble]
-      return next.slice(-5)
+      return next.slice(-3)
     })
   }
 
@@ -327,15 +302,17 @@ export default function App(){
       tauntLastTs.current = ts
 
       setTauntBubbles(prev => prev
-        .map(b => {
+        .map((b, index, all) => {
           const vx = b.vx * driftDamping
           const vy = b.vy + gravity * dt
           const x = b.x + vx * dt
           const y = b.y + vy * dt
           const age = b.age + dt
           const falling = vy > 0
-          const fadeRate = falling ? 0.22 : 0.07
-          const opacityLoss = age > fadeStartAge ? dt * fadeRate : 0
+          const isOldestOfThree = all.length >= 3 && index === 0
+          const fadeRate = isOldestOfThree ? 1.45 : (falling ? 0.22 : 0.07)
+          const fadeStart = isOldestOfThree ? 0.1 : fadeStartAge
+          const opacityLoss = age > fadeStart ? dt * fadeRate : 0
           const opacity = Math.max(0, b.opacity - opacityLoss)
           return { ...b, x, y, vx, vy, age, opacity }
         })
@@ -384,8 +361,7 @@ export default function App(){
           const trimmed = trimHistoryAfterGameOver(newHistory)
           const newIndex = trimmed.length - 1
           setHistory(trimmed)
-          setHistoryIndex(newIndex)
-          historyIndexRef.current = newIndex
+          selectHistoryIndex(newIndex)
         }
       }
       return
@@ -398,8 +374,7 @@ export default function App(){
         const trimmed = trimHistoryAfterGameOver(newHistory)
         const newIndex = trimmed.length - 1
         setHistory(trimmed)
-        setHistoryIndex(newIndex)
-        historyIndexRef.current = newIndex
+        selectHistoryIndex(newIndex)
         const diff = sc.black - sc.white
         const message = pickTaunt(diff)
         spawnTauntBubble(message)
@@ -425,8 +400,7 @@ export default function App(){
             const trimmed = trimHistoryAfterGameOver(newHistory)
             const newIndex = trimmed.length - 1
             setHistory(trimmed)
-            setHistoryIndex(newIndex)
-            historyIndexRef.current = newIndex
+            selectHistoryIndex(newIndex)
             // show highlight for this AI move (no temporary expiry)
             const diff = sc.black - sc.white
             const message = pickTaunt(diff)
@@ -446,135 +420,65 @@ export default function App(){
       const newHistory = [...nextHistory, { board: nextBoard, turn: nextTurn, move }]
       const trimmed = trimHistoryAfterGameOver(newHistory)
       const newIndex = trimmed.length - 1
-      setHistoryIndex(newIndex)
-      historyIndexRef.current = newIndex
+      selectHistoryIndex(newIndex)
       return trimmed
     })
     // highlight is derived from history entry (no expiry logic)
   }
 
-  useEffect(()=>{
-    const list = historyListRef.current
-    if(!list) return
+  function selectHistoryIndex(next:number){
+    setHistoryIndex(next)
+    historyIndexRef.current = next
+  }
 
-    const active = list.querySelector(`li[data-history-index="${historyIndex}"]`) as HTMLLIElement | null
-    if(active){
-      active.scrollIntoView({ block: 'nearest' })
-    }
-  },[historyIndex, history.length])
+  function selectHistoryFromPicker(next:number){
+    if(next === historyIndex) return
+    setHoveredMoveKey(null)
+    setShouldAutoPlayAi(false)
+    setTauntBubbles([])
+    selectHistoryIndex(next)
+  }
 
-  useEffect(()=>{
-    if(hoveredHistoryIndex !== null && hoveredHistoryIndex >= history.length){
-      setHoveredHistoryIndex(null)
-    }
-  },[history.length, hoveredHistoryIndex])
+  function handleHistoryPickerWheel(event: React.WheelEvent<HTMLDivElement>){
+    event.preventDefault()
+    event.stopPropagation()
 
-  useEffect(()=>{
-    if(!supportsHover){
-      setHoveredHistoryIndex(null)
-      setIsTouchHistoryPreviewing(false)
+    historyWheelAccumRef.current += event.deltaY
+    const threshold = 42
+
+    while(historyWheelAccumRef.current >= threshold){
+      const next = Math.min(history.length - 1, historyIndexRef.current + 1)
+      selectHistoryFromPicker(next)
+      historyWheelAccumRef.current -= threshold
     }
-  },[supportsHover])
+    while(historyWheelAccumRef.current <= -threshold){
+      const next = Math.max(0, historyIndexRef.current - 1)
+      selectHistoryFromPicker(next)
+      historyWheelAccumRef.current += threshold
+    }
+
+    if(historyWheelResetTimerRef.current){
+      clearTimeout(historyWheelResetTimerRef.current)
+    }
+    historyWheelResetTimerRef.current = window.setTimeout(()=>{
+      historyWheelAccumRef.current = 0
+      historyWheelResetTimerRef.current = undefined
+    }, 130)
+  }
 
   useEffect(()=>{
     return ()=>{
-      if(historyTouchPreviewTimerRef.current){
-        clearTimeout(historyTouchPreviewTimerRef.current)
+      if(historyWheelResetTimerRef.current){
+        clearTimeout(historyWheelResetTimerRef.current)
       }
     }
   },[])
 
-  function getHistoryIndexFromTouch(touch: Touch){
-    const element = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null
-    const historyItem = element?.closest('li[data-history-index]') as HTMLElement | null
-    if(!historyItem) return null
-    const value = Number(historyItem.dataset.historyIndex)
-    return Number.isInteger(value) ? value : null
-  }
-
-  function handleHistoryTouchStart(event: React.TouchEvent<HTMLOListElement>){
-    if(supportsHover) return
-    const touch = event.touches[0]
-    if(!touch) return
-    const index = getHistoryIndexFromTouch(touch)
-    if(index === null) return
-
-    if(historyTouchPreviewTimerRef.current){
-      clearTimeout(historyTouchPreviewTimerRef.current)
-    }
-
-    historyTouchPreviewActiveRef.current = false
-    suppressHistoryTapRef.current = false
-    historyTouchStartPointRef.current = { x: touch.clientX, y: touch.clientY }
-    historyTouchStartIndexRef.current = index
-
-    historyTouchPreviewTimerRef.current = window.setTimeout(()=>{
-      historyTouchPreviewActiveRef.current = true
-      suppressHistoryTapRef.current = true
-      setIsTouchHistoryPreviewing(true)
-      if(historyTouchStartIndexRef.current !== null){
-        setHoveredHistoryIndex(historyTouchStartIndexRef.current)
-      }
-    }, 260)
-  }
-
-  function handleHistoryTouchMove(event: React.TouchEvent<HTMLOListElement>){
-    if(supportsHover) return
-    event.preventDefault()
-    const touch = event.touches[0]
-    if(!touch) return
-
-    if(historyTouchPreviewActiveRef.current){
-      event.preventDefault()
-      suppressHistoryTapRef.current = true
-      const index = getHistoryIndexFromTouch(touch)
-      if(index !== null){
-        setHoveredHistoryIndex(index)
-      }
-      return
-    }
-
-    const start = historyTouchStartPointRef.current
-    if(start && historyTouchPreviewTimerRef.current){
-      const dx = touch.clientX - start.x
-      const dy = touch.clientY - start.y
-      if(Math.hypot(dx, dy) > 8){
-        clearTimeout(historyTouchPreviewTimerRef.current)
-        historyTouchPreviewTimerRef.current = undefined
-        historyTouchStartPointRef.current = null
-        historyTouchStartIndexRef.current = null
-      }
-    }
-
-    const index = getHistoryIndexFromTouch(touch)
-    if(index !== null) historyTouchStartIndexRef.current = index
-  }
-
-  function handleHistoryTouchEnd(){
-    if(supportsHover) return
-    if(historyTouchPreviewTimerRef.current){
-      clearTimeout(historyTouchPreviewTimerRef.current)
-      historyTouchPreviewTimerRef.current = undefined
-    }
-
-    const wasPreviewing = historyTouchPreviewActiveRef.current
-    historyTouchPreviewActiveRef.current = false
-    historyTouchStartPointRef.current = null
-    historyTouchStartIndexRef.current = null
-
-    if(wasPreviewing){
-      suppressHistoryTapRef.current = true
-    }
-
-    setIsTouchHistoryPreviewing(false)
-    setHoveredHistoryIndex(null)
-  }
-
   useEffect(()=>{
-    if(turn !== player || !isAtLatestHistory){
+    if(turn !== player){
       setHoveredMoveKey(null)
     }
-  },[turn, player, isAtLatestHistory])
+  },[turn, player])
 
   useEffect(()=>{
     const latestGameOver = isAtLatestHistory && isGameOver(board)
@@ -598,7 +502,7 @@ export default function App(){
   }
 
   function handleCellHover(r:number,c:number){
-    if(turn!==player || !isAtLatestHistory){
+    if(turn!==player){
       setHoveredMoveKey(null)
       return
     }
@@ -611,40 +515,12 @@ export default function App(){
   }
 
   function handleUndo(){
-    setHistoryIndex(prev => {
-      const step = prev % 2 === 0 ? 2 : 1
-      const next = Math.max(prev - step, 0)
-      historyIndexRef.current = next
-      return next
-    })
+    const step = historyIndex % 2 === 0 ? 2 : 1
+    const next = Math.max(historyIndex - step, 0)
+    selectHistoryIndex(next)
     setTauntBubbles([])
     setShouldAutoPlayAi(false)
   }
-
-  function handleHistoryDoubleClick(targetIndex:number){
-    if(targetIndex >= historyIndex) return
-    if(targetIndex === 0){
-      setHistory(prev => prev.slice(0, 1))
-      setHistoryIndex(0)
-      historyIndexRef.current = 0
-      setHoveredHistoryIndex(null)
-      setShouldAutoPlayAi(false)
-      setTauntBubbles([])
-      return
-    }
-    const targetEntry = history[targetIndex]
-    const targetMove = targetEntry?.move
-    if(!targetMove || targetMove.player !== aiPlayer) return
-
-    setHistory(prev => prev.slice(0, targetIndex + 1))
-    setHistoryIndex(targetIndex)
-    historyIndexRef.current = targetIndex
-    setHoveredHistoryIndex(null)
-    setShouldAutoPlayAi(false)
-    setTauntBubbles([])
-  }
-
-  
 
   const sc = score(renderedBoard)
   const liveScore = score(board)
@@ -654,6 +530,17 @@ export default function App(){
     : liveScore.black < liveScore.white
       ? 'You lose!'
       : 'Draw!'
+
+  const historyPickerValue = useMemo(()=>({ step: String(historyIndex) }),[historyIndex])
+
+  function formatHistoryLabel(index:number){
+    const entry = history[index]
+    if(!entry) return 'Unknown move'
+    if(index === 0) return 'Start'
+    if(!entry.move) return 'Unknown move'
+    if(entry.move.r === -1) return 'Pass'
+    return `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`
+  }
 
   return (
     <div className="container" ref={containerRef}>
@@ -670,8 +557,7 @@ export default function App(){
           <button onClick={()=>{
             const initial = createInitialBoard()
             setHistory([{ board: initial, turn: BLACK }])
-            setHistoryIndex(0)
-            historyIndexRef.current = 0
+            selectHistoryIndex(0)
             setShouldAutoPlayAi(false)
             setUsedTaunts(new Set())
             setTauntBubbles([])
@@ -686,73 +572,50 @@ export default function App(){
       </div>
 
       <div className="main">
-        <div className={"board-preview-shell" + (isHistoryPreviewing ? ' previewing' : '')}>
+        <div className="board-preview-shell">
           <Board
             board={renderedBoard}
-            onCellClick={(r,c)=>{ if(!isHistoryPreviewing) handleCellClick(r,c) }}
-            onCellHover={isHistoryPreviewing ? undefined : handleCellHover}
-            onCellLeave={isHistoryPreviewing ? undefined : handleCellLeave}
-            hints={!isHistoryPreviewing && turn===player}
-            validMap={!isHistoryPreviewing ? validMap : undefined}
+            onCellClick={handleCellClick}
+            onCellHover={handleCellHover}
+            onCellLeave={handleCellLeave}
+            hints={turn===player}
+            validMap={validMap}
             lastPlacedKey={lastPlacedKey}
             lastFlippedSet={lastFlippedSet}
-            previewFlippedSet={!isHistoryPreviewing ? previewFlippedSet : undefined}
-            previewPlayer={!isHistoryPreviewing && turn===player ? player : null}
+            previewFlippedSet={previewFlippedSet}
+            previewPlayer={turn===player ? player : null}
           />
         </div>
 
-        <aside ref={el=>historyRef.current = el as HTMLDivElement | null} className="history" onMouseLeave={()=>setHoveredHistoryIndex(null)}>
+        <aside className="history">
           <strong>History</strong>
-          <div className="history-help">
-            {supportsHover
-              ? 'Hover any move to preview.'
-              : 'Hold and drag a move to preview.'}
-          </div>
-          <ol
-            ref={historyListRef}
-            onTouchStart={handleHistoryTouchStart}
-            onTouchMove={handleHistoryTouchMove}
-            onTouchEnd={handleHistoryTouchEnd}
-            onTouchCancel={handleHistoryTouchEnd}
+          <div className="history-picker-wrap" role="group" aria-label="History picker" onWheel={handleHistoryPickerWheel}
           >
-            {history.map((entry, index) => (
-              (()=>{
-                const isJumpable = index < historyIndex && (index === 0 || entry.move?.player === aiPlayer)
-                return (
-              <li
-                key={index}
-                data-history-index={index}
-                className={isJumpable ? 'history-jumpable' : ''}
-                onMouseEnter={()=>{ if(supportsHover) setHoveredHistoryIndex(index) }}
-                onClick={()=>{
-                  if(!supportsHover && isJumpable){
-                    if(suppressHistoryTapRef.current){
-                      suppressHistoryTapRef.current = false
-                      return
-                    }
-                    handleHistoryDoubleClick(index)
-                  }
-                }}
-                style={{fontWeight:index===historyIndex ? 'bold' : 'normal'}}
-              >
-                <div className="history-row">
-                  <span>{index===0 ? 'Start' : entry.move ? (entry.move.r === -1 ? 'Pass' : `${entry.move.player===BLACK ? 'Black' : 'White'} @ ${entry.move.r+1},${entry.move.c+1}`) : 'Unknown move'}</span>
-                  {isJumpable && (
-                    <button
-                      type="button"
-                      className="history-revert"
-                      onClick={(event)=>{ event.stopPropagation(); handleHistoryDoubleClick(index) }}
-                      title={index === 0 ? 'Restart from the beginning' : 'Jump back to this move'}
-                    >
-                      Revert
-                    </button>
-                  )}
-                </div>
-              </li>
-                )
-              })()
-            ))}
-          </ol>
+            <Picker
+              className="history-picker"
+              value={historyPickerValue}
+              onChange={(value)=>{
+                const next = Number(value.step)
+                if(Number.isInteger(next)) selectHistoryFromPicker(next)
+              }}
+              wheelMode="off"
+              height={168}
+              itemHeight={56}
+            >
+              <Picker.Column name="step">
+                {history.map((_, index)=>(
+                  <Picker.Item key={index} value={String(index)}>
+                    {({ selected })=> (
+                      <div className={`history-picker-item${selected ? ' is-selected' : ''}`}>
+                        <span className="history-picker-index">{index}</span>
+                        <span className="history-picker-label">{formatHistoryLabel(index)}</span>
+                      </div>
+                    )}
+                  </Picker.Item>
+                ))}
+              </Picker.Column>
+            </Picker>
+          </div>
         </aside>
       </div>
 
