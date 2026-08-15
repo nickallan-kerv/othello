@@ -599,7 +599,6 @@ export default function App(){
                 </select>
               </label>
             </div>
-            <div className="board-build">Build {buildId}</div>
           </div>
           <Board
             board={renderedBoard}
@@ -665,6 +664,7 @@ export default function App(){
             </Picker>
             <div className="history-picker-focus-overlay" aria-hidden />
           </div>
+          <div className="history-build">Build {buildId}</div>
         </aside>
       </div>
 
