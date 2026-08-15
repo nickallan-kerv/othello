@@ -57,7 +57,7 @@ describe('App history picker interactions', () => {
     expect(currentHistoryLabel()).toContain('White @')
   })
 
-  test('undo updates selected history item in picker', async () => {
+  test('selecting a prior history item updates active selection', async () => {
     vi.useFakeTimers()
     const { container } = render(<App />)
 
@@ -67,9 +67,10 @@ describe('App history picker interactions', () => {
     await advanceAiTurn()
 
     const latestLabel = currentHistoryLabel()
-    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    clickHistoryLabel('Start')
     const movedLabel = currentHistoryLabel()
     expect(movedLabel).not.toBe(latestLabel)
+    expect(movedLabel).toBe('Start')
 
     clickFirstValidMove(container)
     await advanceAiTurn()
