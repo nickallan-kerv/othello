@@ -236,6 +236,8 @@ export default function App(){
           const newIndex = trimmed.length - 1
           setHistory(trimmed)
           selectHistoryIndex(newIndex)
+          setAiStatusText(nextAiPhrase())
+          setAiPhase(aiDelayMs > 0 ? 'waiting-delay' : 'thinking')
         }
       }
       return
@@ -452,7 +454,7 @@ export default function App(){
     }
 
     const entry = history[historyIndex]
-    const shouldHint = !!entry && historyIndex > 0 && entry.move?.player === BLACK && entry.turn === BLACK
+    const shouldHint = !!entry && historyIndex > 0 && entry.move?.player === BLACK && entry.turn === WHITE
     if(!shouldHint){
       setShowHistoryWhiteHint(false)
       return
