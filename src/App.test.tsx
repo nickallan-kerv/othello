@@ -63,6 +63,24 @@ function clickHistoryLabel(label: string) {
   fireEvent.click(target)
 }
 
+function clickHistoryLabelByPrefix(prefix: string) {
+  const target = Array.from(document.querySelectorAll('.history-picker-label')).find((el) =>
+    (el.textContent || '').startsWith(prefix)
+  ) as HTMLElement | undefined
+  if (!target) throw new Error(`History label with prefix not found: ${prefix}`)
+  fireEvent.click(target)
+}
+
+function boardFrom(rows: string[]): othello.Cell[][] {
+  return rows.map((row) =>
+    row.split('').map((ch) => {
+      if (ch === '.') return othello.EMPTY
+      if (ch === 'B') return othello.BLACK
+      return othello.WHITE
+    })
+  )
+}
+
 describe('App history picker interactions', () => {
   test('renders picker and tracks current history selection', async () => {
     vi.useFakeTimers()
@@ -225,5 +243,53 @@ describe('App history picker interactions', () => {
     expect(screen.getByRole('button', { name: 'Play again' })).toBeTruthy()
     expect(document.body.textContent || '').toContain('Black 64, White: 0')
     createSpy.mockRestore()
+  })
+
+  test('auto-pass from black still allows AI to play final move and show game-over dialog', async () => {
+    vi.useFakeTimers()
+    const nearEndBoard = boardFrom([
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWW.WWWW',
+      'WWWBWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+      'WWWWWWWW',
+    ])
+    const createSpy = vi.spyOn(othello, 'createInitialBoard').mockReturnValue(nearEndBoard)
+
+    render(<App />)
+
+    // Black has no move at start; app should auto-pass, then White AI should finish.
+    await advanceAiDelay(1000)
+    await flushUpdates()
+
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('I win')).toBeTruthy()
+    expect(document.body.textContent || '').toContain('Black 0, White: 64')
+
+    createSpy.mockRestore()
+  })
+
+  test('shows delayed white-move hint when selecting a black move in history', async () => {
+    vi.useFakeTimers()
+    const { container } = render(<App />)
+
+    clickFirstValidMove(container)
+    await advanceAiTurn()
+
+    expect(currentHistoryLabel()).toContain('White @')
+    clickHistoryLabelByPrefix('Black @')
+
+    expect(document.body.textContent || '').not.toContain('Select a white move')
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+      await Promise.resolve()
+    })
+    expect(document.body.textContent || '').toContain('Select a white move')
+
+    clickHistoryLabelByPrefix('White @')
+    expect(document.body.textContent || '').not.toContain('Select a white move')
   })
 })
